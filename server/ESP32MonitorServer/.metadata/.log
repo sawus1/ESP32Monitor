@@ -1,0 +1,28 @@
+!SESSION 2025-05-15 21:32:44.832 -----------------------------------------------
+eclipse.buildId=4.35.0.20250306-0811
+java.version=21.0.7
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=macosx, ARCH=aarch64, WS=cocoa, NL=en_DE
+Framework arguments:  -product org.eclipse.epp.package.embedcpp.product
+Command-line arguments:  -os macosx -ws cocoa -arch aarch64 -product org.eclipse.epp.package.embedcpp.product
+
+!ENTRY org.eclipse.help.base 2 0 2025-05-15 21:36:17.645
+!MESSAGE Unable to consume Lucene index from bundle 'org.eclipse.cdt.doc.user_12.0.0.202502231714 [115]'. The index should be rebuilt with Lucene 10.1.0
+
+!ENTRY org.eclipse.help.base 2 0 2025-05-15 21:36:17.647
+!MESSAGE Unable to consume Lucene index from bundle 'org.eclipse.tracecompass.gdbtrace.doc.user_10.3.0.202503051725 [573]'. The index should be rebuilt with Lucene 10.1.0
+
+!ENTRY org.eclipse.help.base 2 0 2025-05-15 21:36:17.647
+!MESSAGE Unable to consume Lucene index from bundle 'org.eclipse.tracecompass.analysis.profiling.doc.user_10.3.0.202503051725 [562]'. The index should be rebuilt with Lucene 10.1.0
+
+!ENTRY org.eclipse.help.base 2 0 2025-05-15 21:36:17.647
+!MESSAGE Unable to consume Lucene index from bundle 'org.eclipse.cdt.autotools.docs_12.0.0.202410081652 [87]'. The index should be rebuilt with Lucene 10.1.0
+
+!ENTRY org.eclipse.help.base 2 0 2025-05-15 21:36:17.648
+!MESSAGE Unable to consume Lucene index from bundle 'org.eclipse.tracecompass.doc.user_10.3.0.202503051725 [571]'. The index should be rebuilt with Lucene 10.1.0
+
+!ENTRY org.eclipse.help.base 2 0 2025-05-15 21:36:17.648
+!MESSAGE Unable to consume Lucene index from bundle 'org.eclipse.cdt.meson.docs_12.0.0.202410081652 [138]'. The index should be rebuilt with Lucene 10.1.0
+
+!ENTRY org.eclipse.help.base 2 0 2025-05-15 21:36:17.649
+!MESSAGE Unable to consume Lucene index from bundle 'org.eclipse.tracecompass.doc.dev_10.3.0.202503051725 [570]'. The index should be rebuilt with Lucene 10.1.0
