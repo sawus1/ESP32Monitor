@@ -1,4 +1,5 @@
 import java.io.BufferedReader;
+import com.google.gson.Gson;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
@@ -60,7 +61,7 @@ public class ESP32MonitorClient
 		}
 	}
 	
-	public static void sendGETRequest(String uri) {
+	public static String sendGETRequest(String uri) {
 	    try (Socket socket = new Socket(host, port);
 	         PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
 	         BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
@@ -72,19 +73,29 @@ public class ESP32MonitorClient
 	        out.println(request.toString());
 
 	        String line;
+	        StringBuilder response = new StringBuilder("");
 	        while ((line = in.readLine()) != null) {
 	            System.out.println(line);
+	            response.append(line);
 	        }
-
+	        return response.toString();
+	        
 	    } catch (IOException e) {
 	        System.out.println(e.getMessage());
 	    }
+	    return null;
 	}
 	
 	public static void getSysData()
 	{
 		try {
-			sendGETRequest("/systemdata");
+			String response = sendGETRequest("/systemdata");
+			String responseBody = "";
+			if(response.contains("200 OK"))
+			{
+				responseBody = response.substring(response.indexOf('{'));
+			}	
+			SystemInfo info = new SystemInfo(responseBody);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}

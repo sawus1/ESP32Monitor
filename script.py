@@ -17,17 +17,18 @@ while True:
         if command == "get_systemdata":
             # Run a combination of useful Linux system commands
             commands = [
-                "uname -a",
-                "uptime",
-                "df -h",
-                "free -h"
+                "uname",
+                "uname -n",
+                "uname -v",
+                "uname -r",
+                "uname -m"
             ]
             
             result = ""
             for cmd in commands:
                 try:
                     output = subprocess.check_output(cmd, shell=True, text=True)
-                    result += f"\n$ {cmd}\n{output}"
+                    result += f"{output}$"
                 except subprocess.CalledProcessError as e:
                     result += f"\n$ {cmd}\nError: {str(e)}\n"
 
