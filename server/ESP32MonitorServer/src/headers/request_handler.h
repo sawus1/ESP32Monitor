@@ -65,9 +65,9 @@ std::string sendCommandToSerial(String command){
         while (Serial.available()) {
             char c = Serial.read();
             line += c;
-            if (line.endsWith("###END###")) {
+            if (line.endsWith("###SYS_END###")) {
                 fullResponse = line;
-                fullResponse.replace("###END###", ""); // Remove the end marker
+                fullResponse.replace("###SYS_END###", ""); // Remove the end marker
                 goto done;
             }
         }

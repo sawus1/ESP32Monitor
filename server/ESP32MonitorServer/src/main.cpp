@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <string>
 #include "WiFiS3.h"
+#include "protothreads.h"
 
 #include "/Users/oleksandrsavcenko/arduino_secrets.h"
 #include "headers/request_handler.h"
@@ -10,8 +11,13 @@ char pass[] = SECRET_PASS;
 int led = LED_BUILTIN;
 int status = WL_IDLE_STATUS;
 WiFiServer server(80);
+WiFiServer server2(5000);
+
+pt ptHttp;
+pt ptSo;
 
 void printWifiStatus();
+int httpThread(struct pt* pt);
 
 void setup() {
   Serial.begin(9600);
@@ -35,18 +41,21 @@ void setup() {
     delay(10000);
   }
   server.begin();
+  server2.begin();
   printWifiStatus();
+  PT_INIT(&ptHttp);
 }
 
-
-void loop() {
-  WiFiClient client = server.available();
-  
-  if(client){
-    Serial.println("new client");
-    std::string currentLine = "";
-    while(client.connected()){
-      if(client.available()){
+int httpThread(struct pt* pt)
+{
+  PT_BEGIN(pt);
+  while(true){
+    WiFiClient client = server.available();
+    if(client){
+      Serial.println("New HTTP client");
+      std::string currentLine = "";
+      while(client.connected())
+      {
         char c = client.read();
         Serial.write(c);
         if (c == '\n') {
@@ -69,10 +78,14 @@ void loop() {
           currentLine += c;
         }
       }
+      client.stop();
+      Serial.write("HTTP Client disconnected");
     }
-    client.stop();
-    Serial.println("client disconnected");
   }
+  PT_END(pt);
+}
+void loop() {
+  PT_SCHEDULE(httpThread(&ptHttp));
 }
 
 void printWifiStatus(){

@@ -9,7 +9,8 @@ public class ESP32MonitorClient
 {
 	//private Socket so;
 	private static String host = null;
-	private static int port;
+	private static int portHttp;
+	private static int portSo;
 	public static GUI window;
 	//private BufferedReader in = null;
 	private static BufferedReader inSo;
@@ -18,11 +19,11 @@ public class ESP32MonitorClient
 	{
 		Socket so = null;
 		host = args[0];
-		port = Integer.valueOf(args[1]).intValue();
-		
+		portSo = 5000;
+		portHttp = 80;
 		try 
 		{
-			so = new Socket(host, port);
+			so = new Socket(host, portHttp);
 		}
 		catch(IOException e) {
 			System.out.println(e);
@@ -62,7 +63,7 @@ public class ESP32MonitorClient
 	}
 	
 	public static String sendGETRequest(String uri) {
-	    try (Socket socket = new Socket(host, port);
+	    try (Socket socket = new Socket(host, portHttp);
 	         PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
 	         BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
 
