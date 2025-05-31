@@ -1,103 +1,76 @@
 #include <Arduino.h>
-#include <string>
-#include "WiFiS3.h"
-#include "protothreads.h"
+#include <WiFi.h>
+#define LED 2
 
-#include "/Users/oleksandrsavcenko/arduino_secrets.h"
-#include "headers/request_handler.h"
-char ssid[] = SECRET_SSID;
-char pass[] = SECRET_PASS;
-
-int led = LED_BUILTIN;
-int status = WL_IDLE_STATUS;
-WiFiServer server(80);
-WiFiServer server2(5000);
-
-pt ptHttp;
-pt ptSo;
-
-void printWifiStatus();
-int httpThread(struct pt* pt);
+WiFiServer server(5000);
+String request;
+WiFiClient client;
+bool wifiConnected = false;
 
 void setup() {
-  Serial.begin(9600);
-  pinMode(led, OUTPUT);
-
-  if(WiFi.status() == WL_NO_MODULE){
-    Serial.println("Communication with WiFi module failed!");
-    while(true);
-  }
-  
-  String fv = WiFi.firmwareVersion();
-  if(fv < WIFI_FIRMWARE_LATEST_VERSION){
-    Serial.println("Please upgrade the firmware");
-  }
-  
-  while(status != WL_CONNECTED){
-    Serial.print("Attempting to connect to Nework named: ");
-    Serial.println(ssid);
-
-    status = WiFi.begin(ssid, pass);
-    delay(10000);
-  }
-  server.begin();
-  server2.begin();
-  printWifiStatus();
-  PT_INIT(&ptHttp);
-}
-
-int httpThread(struct pt* pt)
-{
-  PT_BEGIN(pt);
-  while(true){
-    WiFiClient client = server.available();
-    if(client){
-      Serial.println("New HTTP client");
-      std::string currentLine = "";
-      while(client.connected())
-      {
-        char c = client.read();
-        Serial.write(c);
-        if (c == '\n') {
-          if (currentLine.length() == 0) {
-            // Headers ended
-            break; // Exit the loop after headers
-          }
-
-          // Process the request line
-          if (currentLine.find("GET") != std::string::npos) {
-            size_t start = currentLine.find("GET") + 4; // Skip "GET "
-            size_t end = currentLine.find("HTTP");
-            std::string method = currentLine.substr(start, end - start - 1); // exclude trailing space
-            client.println(handleGetRequest(method) + "\n");
-          }
-
-          currentLine = ""; // Reset for next header line
-        }
-        else if (c != '\r') {
-          currentLine += c;
-        }
+  Serial.begin(115200);
+  pinMode(LED, OUTPUT);
+  WiFi.mode(WIFI_STA);
+  while(true)
+  {
+    if(Serial.available()){
+      String info = Serial.readStringUntil('\n');
+      info.trim();
+      int comma = info.indexOf(',');
+      String ssid = info.substring(0, comma);
+      String password = info.substring(comma+1);
+      WiFi.begin(ssid.c_str(), password.c_str());
+      unsigned long startAttemptTime = millis();
+      const unsigned long timeout = 10000;
+      while(WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout){
+        delay(500);
       }
-      client.stop();
-      Serial.write("HTTP Client disconnected");
+      if(WiFi.status() == WL_CONNECTED)
+      {
+        Serial.println("Connected, Device IP: " + WiFi.localIP().toString());
+        digitalWrite(LED, HIGH);
+        break;
+      }
+      else
+      {
+        Serial.println("Connection Failed!");
+        WiFi.disconnect();
+      }
     }
   }
-  PT_END(pt);
+  server.begin();
 }
+
 void loop() {
-  PT_SCHEDULE(httpThread(&ptHttp));
-}
-
-void printWifiStatus(){
-  Serial.print("SSID: ");
-  Serial.println(WiFi.SSID());
-
-  IPAddress ip = WiFi.localIP();
-  Serial.print("IP Address: ");
-  Serial.println(ip);
+  client = server.available();
+  if(!client){
+    return;
+  }
+  for(int i = 0; i < 4; i++){
+    digitalWrite(LED, LOW);
+    delay(100);
+    digitalWrite(LED, HIGH);
+    delay(100);
+  }
+  while(client.connected())
+  {
+    if(client.available())
+    {
+      char c = client.read();
+      request += c;
+      if(c == '\n')
+      {
+        request.trim();
+        Serial.println(request);
+        request = "";
+        delay(1000);
+        if(Serial.available())
+        {
+          String response = Serial.readStringUntil('$');
+          client.write(response.c_str());
+        }
+      }
+    }
+  }
   
-  long rssi = WiFi.RSSI();
-  Serial.print("signal strength(RSSI): ");
-  Serial.print(rssi);
-  Serial.println(" dBm");
 }

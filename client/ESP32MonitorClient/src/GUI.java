@@ -18,10 +18,13 @@ public class GUI implements ActionListener{
 		JButton button = new JButton("ON");
 		JButton button2 = new JButton("OFF");
 		JButton button3 = new JButton("Get system data");
+		JButton button4 = new JButton("Start monitoring");
+		JButton button5 = new JButton("Stop monitoring");
 		button.addActionListener(this);
 		button2.addActionListener(new OFFAction());
 		button3.addActionListener(new GetSysDataAction());
-		
+		button4.addActionListener(new StartMonitorAction());
+		button5.addActionListener(new StopMonitorAction());
 		label = new JLabel("Change LED state");
 		JPanel panel = new JPanel();
 		panel.setBorder(BorderFactory.createEmptyBorder(30, 30, 10, 30));
@@ -30,12 +33,13 @@ public class GUI implements ActionListener{
 		panel.add(button);
 		panel.add(button2);
 		panel.add(button3);
-		
+		panel.add(button4);
+		panel.add(button5);
 		frame.add(panel, BorderLayout.CENTER);
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		frame.setTitle("GUI");
 		frame.pack();
-		frame.setSize(600, 600);
+		frame.setSize(900, 300);
 		frame.setVisible(true);
 	}
 

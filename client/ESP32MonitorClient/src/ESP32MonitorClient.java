@@ -23,7 +23,7 @@ public class ESP32MonitorClient
 		portHttp = 80;
 		try 
 		{
-			so = new Socket(host, portHttp);
+			so = new Socket(host, portSo);
 		}
 		catch(IOException e) {
 			System.out.println(e);
@@ -39,13 +39,20 @@ public class ESP32MonitorClient
 		outSo = new PrintWriter(so.getOutputStream(), true);
 		System.out.println("> Input:");
 		String input;
+		new Thread()
+		{
+			public void run()
+			{
+				window = new GUI();
+			}
+		}.start();
+		
 		window = new GUI();
 		while((input = in.readLine()) != null && !input.equals("quit")) {
 			outSo.println(input);
 			System.out.println("> Answer from Server: ");
 			String line;
-			while ((line = inSo.readLine()) != null) {
-			    if (line.equals("")) break;
+			while ((line = inSo.readLine()) != null || true) {
 			    System.out.println(line);
 			}
 			System.out.println("> Input: ");
@@ -116,6 +123,25 @@ public class ESP32MonitorClient
 		try {
 			sendGETRequest("/L");
 		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	public static void startMonitor()
+	{
+		try {
+			sendGETRequest("/startmonitor");
+		} catch(Exception e)
+		{
+			e.printStackTrace();
+		}
+	}
+	public static void stopMonitor()
+	{
+		try {
+			sendGETRequest("/stopmonitor");
+		} catch(Exception e)
+		{
 			e.printStackTrace();
 		}
 	}

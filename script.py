@@ -1,88 +1,77 @@
-
 import serial
-import subprocess
-import threading
+import serial.tools.list_ports
 import time
+import subprocess
 
-SERIAL_PORT = '/dev/cu.usbmodem48CA435E48842'
-BAUD_RATE = 9600
+def ESP32_detect():
+    ports = serial.tools.list_ports.comports()
+    for port in ports:
+        desc = port.description.lower()
+        manuf = (port.manufacturer or "").lower()
+        
+        if "ch340" in desc or "cp210" in desc or "silicon labs" in manuf or "ftdi" in desc:
+            return port.device
 
-ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+    return None
 
-monitoring_active = False
-isWriting = False
+port = ESP32_detect()
+while not port:
+    print("\nPlease insert the device and press ENTER\n")
+    input()
+    port = ESP32_detect()
 
-def safe_serial_write(data):
-    try:
-        isWriting = True
-        ser.write(data.encode())
-        isWriting = False
-    except Exception as e:
-        print(f"Serial write error: {e}")
+print(f"ESP32 detected on port {port}!\n")
 
-def stream_monitoring_data():
-    global monitoring_active
-    while monitoring_active:
-        try:
-            output = subprocess.check_output(["top", "-b", "-n", "1"], text=True)
-            trimmed = output[:4000] + "\n###MONITOR_END###"
-            while isWriting:
-                pass
-            safe_serial_write(trimmed)
-        except Exception as e:
-            while isWriting:
-                pass
-            safe_serial_write(f"Monitor error: {e}\n###MONITOR_END###")
-        time.sleep(2)  # Repeat every 2 seconds
+ser = serial.Serial(port=port, baudrate=115200, timeout=None)
+time.sleep(2)
 
-def handle_command(command):
-    global monitoring_active
-    print(f"Received command: {command}")
 
-    if command == "get_systemdata":
-        # Run in a new thread to avoid blocking the main loop
-        def send_systemdata():
-            commands = [
-                "uname",
-                "uname -n",
-                "uname -v",
-                "uname -r",
-                "uname -m"
-            ]
-            result = ""
-            for cmd in commands:
-                try:
-                    output = subprocess.check_output(cmd, shell=True, text=True)
-                    result += f"{output.strip()}$"
-                except subprocess.CalledProcessError as e:
-                    result += f"\n$ {cmd}\nError: {str(e)}\n"
-            result += "###SYS_END###"
-            while isWriting:
-                pass
-            safe_serial_write(result)
+while(True):
+    wlan = input("\nPlease write your WLAN Name: ")
+    password = input("\nPlease write your WLAN Password: ")
 
-        threading.Thread(target=send_systemdata, daemon=True).start()
+    ser.write(f'{wlan},{password}\n'.encode())
+    time.sleep(1)
 
-    elif command == "get_monitoring_data":
-        if not monitoring_active:
-            monitoring_active = True
-            threading.Thread(target=stream_monitoring_data, daemon=True).start()
-            while isWriting:
-                pass
-            safe_serial_write("###MONITOR_START###")
+    response = ser.readline().decode().strip()
+    print(response)
+    if 'Connected' in response:
+        print('WiFi Connected. Now entering command mode...')
+        break
+    else:
+        print('Failed to connect. Please try again.')
+        continue
 
-    elif command == "stop_monitoring":
-        monitoring_active = False
-        while isWriting:
-            pass
-        safe_serial_write("###MONITOR_STOPPED###")
+try:
+    while True:
+       cmd = ser.readline().decode().strip()
+       if cmd.lower() in ['exit', 'quit']:
+           print('\nExiting command mode. \n')
+           break
 
-# Main loop
-while True:
-    try:
-        if ser.in_waiting:
-            line = ser.readline().decode().strip()
-            handle_command(line)
-    except Exception as e:
-        print(f"Error in main loop: {e}")
+       print(f"Received command: {cmd}")
+       try:
+           result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
+           output = result.stdout + result.stderr + '$'
+           if not output:
+               output = "Command executed, but no output\n"
+       except subprocess.TimeoutExpired:
+            output = "Command timed out.\n"
+       except Exception as e:
+            output = f"Error executing command: {str(e)}\n"
 
+       for line in output.splitlines():
+            ser.write((line[:250] + '\n').encode())
+            time.sleep(0.1)
+
+except KeyboardInterrupt:
+    print('\nInterrupted by user. Exiting...')
+finally:
+    ser.close()
+
+
+
+
+
+
+    
