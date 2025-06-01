@@ -1,5 +1,6 @@
-#include <Arduino.h>
 #include <WiFi.h>
+#include <ArduinoJson.h>
+#include "headers/request_handler.h"
 #define LED 2
 
 WiFiServer server(5000);
@@ -61,13 +62,12 @@ void loop() {
       if(c == '\n')
       {
         request.trim();
-        Serial.println(request);
-        request = "";
-        delay(1000);
-        if(Serial.available())
+        if(request == "/getSysInfo")
         {
-          String response = Serial.readStringUntil('$');
-          client.write(response.c_str());
+          systemdata::system_info info = getSystemInfo();
+          JsonDocument doc;
+          info.serializeSystemInfo(doc);
+          serializeJson(doc, client);
         }
       }
     }
