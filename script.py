@@ -62,7 +62,6 @@ try:
 
        for line in output.splitlines():
             ser.write((line[:250] + '\n').encode())
-            time.sleep(0.1)
 
 except KeyboardInterrupt:
     print('\nInterrupted by user. Exiting...')

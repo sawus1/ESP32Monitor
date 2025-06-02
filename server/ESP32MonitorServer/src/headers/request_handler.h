@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "headers/systemdata.h"
+#include "headers/monitoringdata.h"
 #include <bits/stdc++.h>
 std::string executeCommand(String command)
 {
@@ -8,7 +9,7 @@ std::string executeCommand(String command)
     // Wait for response with timeout
     unsigned long timeout = millis() + 3000;  // 3 seconds
     while (!Serial.available() && millis() < timeout) {
-        delay(5);
+        delay(1);
     }
 
     if (!Serial.available()) {
@@ -149,4 +150,289 @@ systemdata::system_info getSystemInfo()
     info.kernel = getKernelInfo();
     info.os = getOSInfo();
     return info;
+}
+
+monitoringdata::CPUStat getCpuStat()
+{
+    monitoringdata::CPUStat stats;
+    std::string result = executeCommand("cat /proc/stat | grep -E 'cpu '");
+
+    if(result.find("ERROR") == 0)
+    {
+        stats.guest = 0;
+        stats.nice = 0;
+        stats.system = 0;
+        stats.idle = 0;
+        stats.iowait = 0;
+        stats.irq = 0;
+        stats.softirq = 0;
+        stats.steal = 0;
+        stats.guest = 0;
+        stats.guest_nice = 0;
+    }
+
+    unsigned long params[10];
+    std::stringstream s(result);
+    std::string tmp;
+    char del = ' ';
+    byte i = 0;
+    s >> tmp;  // read and discard "cpu"
+    for (int i=0; i<10; i++) {
+        s >> params[i];
+    }
+
+    stats.user = params[0];
+    stats.nice = params[1];
+    stats.system = params[2];
+    stats.idle = params[3];
+    stats.iowait = params[4];
+    stats.irq = params[5];
+    stats.softirq = params[6];
+    stats.steal = params[7];
+    stats.guest = params[8];
+    stats.guest_nice = params[9];
+
+    return stats;
+}
+
+monitoringdata::MemoryInfo getMemInfo()
+{
+    monitoringdata::MemoryInfo info;
+    std::string result = executeCommand("cat /proc/meminfo | grep -E 'MemTotal|SwapFree|Buffers|^Cached|MemFree|SwapTotal'");
+
+    if(result.find("ERROR") == 0 ){
+        info.Buffers = 0;
+        info.MemFree = 0;
+        info.MemTotal = 0;
+        info.Cached =0;
+        info.SwapTotal = 0;
+        info.SwapFree = 0;
+
+        return info;
+    }
+
+    std::stringstream stream(result);
+    std::string line;
+    std::map<std::string, unsigned long> parsed;
+
+    while(std::getline(stream, line)){
+        size_t dl = line.find(":");
+        if(dl != std::string::npos)
+        {
+            std::string key = line.substr(0, dl);
+            unsigned long value = stoul(line.substr(dl + 1));
+
+            parsed[key] = value;
+
+        }
+    }
+
+    info.Buffers = parsed.count("Buffers") ? parsed["Buffers"] : 0;
+    info.MemTotal = parsed.count("MemTotal") ? parsed["MemTotal"] : 0;
+    info.MemFree = parsed.count("MemFree") ? parsed["MemFree"] : 0;
+    info.SwapFree = parsed.count("SwapFree") ? parsed["SwapFree"] : 0;
+    info.SwapTotal = parsed.count("SwapTotal") ? parsed["SwapTotal"] : 0;
+    info.Cached = parsed.count("Cached") ? parsed["Cached"] : 0;
+
+    return info;
+}
+
+std::vector<monitoringdata::DiskUsage> getDiskUsage()
+{
+    std::string response = executeCommand("df -k --output=source,size,used,avail,pcent,target");
+    std::vector<monitoringdata::DiskUsage> usage;
+
+    if (response.find("ERROR") == 0 || response.empty()) {
+        usage.push_back(monitoringdata::DiskUsage{
+            .filesystem = "unknown",
+            .size = 0,
+            .used = 0,
+            .available = 0,
+            .use_percent = 0,
+            .mount_point = "unknown"
+        });
+        return usage;
+    }
+
+    std::stringstream stream(response);
+    std::string line;
+
+    // Skip the header line
+    std::getline(stream, line);
+
+    while (std::getline(stream, line)) {
+        if (line.empty()) continue;
+
+        std::istringstream linestream(line);
+        std::string filesystem, size_str, used_str, avail_str, use_str, mount;
+
+        linestream >> filesystem >> size_str >> used_str >> avail_str >> use_str >> mount;
+
+        try {
+            monitoringdata::DiskUsage dusage;
+            dusage.filesystem = filesystem;
+            dusage.size = std::stoll(size_str);
+            dusage.used = std::stoll(used_str);
+            dusage.available = std::stoll(avail_str);
+
+            // Strip '%' from use_str
+            use_str.erase(std::remove(use_str.begin(), use_str.end(), '%'), use_str.end());
+            dusage.use_percent = std::stoi(use_str);
+
+            dusage.mount_point = mount;
+
+            usage.push_back(dusage);
+        } catch (...) {
+            // Skip line if any conversion fails
+            continue;
+        }
+    }
+
+    return usage;
+}
+
+monitoringdata::ProcessInfo getProcessInfo(int pid){
+    String piid(pid);
+    monitoringdata::ProcessInfo info;
+    std::string result = executeCommand("ls /proc" + piid + "/status | grep -E 'Name|State|Pid|PPid|Threads|VmSize|VmRSS|VmSwap'");
+
+    if(result.find("ERROR") == 0){
+        info.name = "unknown";
+        info.pid = 0;
+        info.ppid = 0;
+        info.state = "unknown";
+        info.threads = 0;
+        info.vmrss = 0;
+        info.vmsize = 0;
+        info.vmswap = 0;
+
+        return info;
+    }
+
+    std::stringstream stream(result);
+    std::string line;
+    std::map<std::string, std::string> parsed;
+
+    while(std::getline(stream, line)){
+        size_t dl = line.find(':');
+        if(dl != std::string::npos){
+            std::string key = line.substr(0, dl);
+            std::string value = line.substr(dl + 1);
+
+            if(!value.empty() && value.front() == '"') value = value.substr(1);
+            if(!value.empty() && value.back() == '"') value.pop_back();
+
+            parsed[key] = value;
+        }
+    }
+
+    info.name = parsed.count("Name") ? parsed["Name"] : "unknown";
+    info.state = parsed.count("State") ? parsed["State"] : "unknown";
+    info.pid = parsed.count("Pid") ? stoi(parsed["Pid"]) : 0; 
+    info.ppid = parsed.count("Ppid") ? stoi(parsed["Pid"]) : 0;
+    info.threads = parsed.count("Threads") ? stoi(parsed["Threads"]) : 0;
+    info.vmsize = parsed.count("VmSize") ? stoul(parsed["VmSize"]) : 0;
+    info.vmrss = parsed.count("VmRSS") ? stoul(parsed["VmRSS"]) : 0;
+    info.vmswap = parsed.count("VmSwap") ? stoul(parsed["VmSwap"]) : 0;
+
+    return info;
+}
+
+std::map<int, std::string> getProcesses()
+{
+    std::map<int, std::string> processes;
+    // Use ps to get PID and command name
+    std::string result = executeCommand("ps -eo pid,comm --no-headers");
+    if (result.empty())
+    {
+        return processes;
+    }
+
+    std::stringstream stream(result);
+    std::string line;
+    while (std::getline(stream, line))
+    {
+        if (line.empty())
+        {
+            continue;
+        }
+
+        std::istringstream linestream(line);
+        int pid;
+        std::string name;
+        if (linestream >> pid >> name)
+        {
+            processes[pid] = name;
+        }
+    }
+    return processes;
+}
+
+std::vector<monitoringdata::NetworkInterface> getNetworkInfo()
+{
+    std::string response = executeCommand("cat /proc/net/dev");
+    std::vector<monitoringdata::NetworkInterface> interfaces;
+
+    if (response.find("ERROR") == 0 || response.empty()) {
+        interfaces.push_back(monitoringdata::NetworkInterface{
+            .name = "unknown",
+            .receive_bytes = 0,
+            .transmit_bytes = 0
+        });
+        return interfaces;
+    }
+
+    std::stringstream stream(response);
+    std::string line;
+
+    // Skip first two header lines
+    std::getline(stream, line);
+    std::getline(stream, line);
+
+    while (std::getline(stream, line)) {
+        if (line.empty()) continue;
+
+        // Format: iface: <stats...>
+        auto colon_pos = line.find(':');
+        if (colon_pos == std::string::npos) continue;
+
+        std::string iface_name = line.substr(0, colon_pos);
+        // Trim spaces
+        iface_name.erase(0, iface_name.find_first_not_of(" \t"));
+        iface_name.erase(iface_name.find_last_not_of(" \t") + 1);
+
+        std::string stats_str = line.substr(colon_pos + 1);
+        std::istringstream statsstream(stats_str);
+
+        unsigned long receive_bytes = 0;
+        unsigned long transmit_bytes = 0;
+
+        // Fields after iface:
+        // receive_bytes (1), receive_packets (2), ..., transmit_bytes (9), ...
+        statsstream >> receive_bytes;
+        for (int i = 0; i < 7; ++i) {
+            unsigned long skip;
+            statsstream >> skip;
+        }
+        statsstream >> transmit_bytes;
+
+        interfaces.push_back(monitoringdata::NetworkInterface{
+            .name = iface_name,
+            .receive_bytes = receive_bytes,
+            .transmit_bytes = transmit_bytes
+        });
+    }
+
+    return interfaces;
+}
+
+monitoringdata::SystemLoadData getSystemLoadData()
+{
+    monitoringdata::SystemLoadData data;
+    data.memory = getMemInfo();
+    data.cpu_stat = getCpuStat();
+    data.network_interfaces = getNetworkInfo();
+    data.processes = getProcesses();
+    data.disk_usage = getDiskUsage();
+    return data;
 }

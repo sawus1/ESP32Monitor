@@ -67,8 +67,20 @@ void loop() {
           systemdata::system_info info = getSystemInfo();
           JsonDocument doc;
           info.serializeSystemInfo(doc);
-          serializeJson(doc, client);
+          String response;
+          serializeJson(doc, response);
+          client.print(response);
         }
+        if(request == "/getMonitoringData")
+        {
+          monitoringdata::SystemLoadData data = getSystemLoadData();
+          JsonDocument doc;
+          data.serializeMonitoringData(doc);
+          String response;
+          serializeJson(doc, response);
+          client.print(response);
+        }
+        request = "";
       }
     }
   }
