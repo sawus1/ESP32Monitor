@@ -338,6 +338,17 @@ monitoringdata::ProcessInfo getProcessInfo(int pid){
     return info;
 }
 
+bool killProcess(int pid)
+{
+    String id(pid);
+    std::string result = executeCommand("sudo kill "+id);
+    if(result.find("ERROR") == 0)
+    {
+        return false;
+    }
+    return true;
+}
+
 std::map<int, std::string> getProcesses()
 {
     std::map<int, std::string> processes;

@@ -1,14 +1,25 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include "headers/request_handler.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+
 #define LED 2
+#define STACK_SIZE 4096
 
 WiFiServer server(5000);
 String request;
 WiFiClient client;
 bool wifiConnected = false;
+bool isMonitor = false;
+xSemaphoreHandle xMutex;
 
-void setup() {
+void monitoring_task(void* pvParameters);
+
+
+void setup(void)
+{
   Serial.begin(115200);
   pinMode(LED, OUTPUT);
   WiFi.mode(WIFI_STA);
@@ -40,9 +51,19 @@ void setup() {
     }
   }
   server.begin();
+  xMutex = xSemaphoreCreateMutex();
+  xTaskCreatePinnedToCore(
+    monitoring_task, 
+    "monitoring_task", 
+    STACK_SIZE, 
+    NULL, 
+    1, 
+    NULL,
+    tskNO_AFFINITY);
 }
 
-void loop() {
+void loop()
+{
   client = server.available();
   if(!client){
     return;
@@ -64,25 +85,52 @@ void loop() {
         request.trim();
         if(request == "/getSysInfo")
         {
-          systemdata::system_info info = getSystemInfo();
-          JsonDocument doc;
-          info.serializeSystemInfo(doc);
-          String response;
-          serializeJson(doc, response);
-          client.print(response);
+          if(xSemaphoreTake(xMutex, portMAX_DELAY))
+          {
+            systemdata::system_info info = getSystemInfo();
+            JsonDocument doc;
+            info.serializeSystemInfo(doc);
+            String response;
+            serializeJson(doc, response);
+            client.print(response);
+            xSemaphoreGive(xMutex);
+          }
+          
         }
-        if(request == "/getMonitoringData")
+        if(request == "/startMonitor")
         {
-          monitoringdata::SystemLoadData data = getSystemLoadData();
-          JsonDocument doc;
-          data.serializeMonitoringData(doc);
-          String response;
-          serializeJson(doc, response);
-          client.print(response);
+          isMonitor = true;   
+        }
+        if(request == "/stopMonitor")
+        {
+          isMonitor = false;
+        }
+        if(request == "/disconnect")
+        {
+          client.stop();
         }
         request = "";
       }
     }
   }
-  
+}
+
+void monitoring_task(void* pvParameters)
+{
+  while(true)
+  {
+    if(isMonitor && client.connected()){
+      if(xSemaphoreTake(xMutex, portMAX_DELAY))
+      {
+        monitoringdata::SystemLoadData data = getSystemLoadData();
+        JsonDocument doc;
+        data.serializeMonitoringData(doc);
+        String response;
+        serializeJson(doc,response);
+        client.print(response);
+        xSemaphoreGive(xMutex);
+      }
+    }
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
+  }
 }
