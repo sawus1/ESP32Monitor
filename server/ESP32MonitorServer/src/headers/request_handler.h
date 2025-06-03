@@ -291,10 +291,9 @@ std::vector<monitoringdata::DiskUsage> getDiskUsage()
     return usage;
 }
 
-monitoringdata::ProcessInfo getProcessInfo(int pid){
-    String piid(pid);
+monitoringdata::ProcessInfo getProcessInfo(String pid){
     monitoringdata::ProcessInfo info;
-    std::string result = executeCommand("ls /proc" + piid + "/status | grep -E 'Name|State|Pid|PPid|Threads|VmSize|VmRSS|VmSwap'");
+    std::string result = executeCommand("ls /proc/" + pid + "/status | grep -E 'Name|State|Pid|PPid|Threads|VmSize|VmRSS|VmSwap'");
 
     if(result.find("ERROR") == 0){
         info.name = "unknown";
@@ -338,10 +337,9 @@ monitoringdata::ProcessInfo getProcessInfo(int pid){
     return info;
 }
 
-bool killProcess(int pid)
+bool killProcess(String pid)
 {
-    String id(pid);
-    std::string result = executeCommand("sudo kill "+id);
+    std::string result = executeCommand("sudo kill " + pid);
     if(result.find("ERROR") == 0)
     {
         return false;

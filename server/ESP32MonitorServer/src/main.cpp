@@ -109,6 +109,36 @@ void loop()
         {
           client.stop();
         }
+        if(request.indexOf("/getProcInfo") != -1)
+        {
+          String pid = request.substring(13);
+          if(xSemaphoreTake(xMutex, portMAX_DELAY))
+          {
+            monitoringdata::ProcessInfo info = getProcessInfo(pid);
+            JsonDocument doc;
+            info.serializeProcessInfo(doc);
+            String response;
+            serializeJson(doc, response);
+            client.print(response);
+            xSemaphoreGive(xMutex);
+          }
+        }
+        if(request.indexOf("/killProc") != -1)
+        {
+          String pid = request.substring(10);
+          if(killProcess(pid))
+          {
+            if(xSemaphoreTake(xMutex, portMAX_DELAY))
+            {
+              client.println("killed");
+              xSemaphoreGive(xMutex);
+            }
+          }
+        }
+        if(request == "/rebootSystem")
+        {
+          executeCommand("sudo reboot");
+        }
         request = "";
       }
     }

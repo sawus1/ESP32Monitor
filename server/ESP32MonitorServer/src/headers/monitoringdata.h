@@ -43,6 +43,21 @@ namespace monitoringdata
         unsigned long vmsize;
         unsigned long vmrss;
         unsigned long vmswap;
+
+        void serializeProcessInfo(JsonDocument& doc)
+        {
+            doc["datatype"] = "process_info";
+
+            JsonObject JProc = doc.createNestedObject("process");
+            JProc["pid"] = pid;
+            JProc["name"] = name;
+            JProc["state"] = state;
+            JProc["ppid"] = ppid;
+            JProc["threads"] = threads;
+            JProc["vmsize"] = vmsize;
+            JProc["vmrss"] = vmrss;
+            JProc["vmswap"] = vmswap;
+        }
     };
 
     struct DiskUsage {
