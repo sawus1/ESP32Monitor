@@ -1,148 +1,42 @@
-import java.io.BufferedReader;
-import com.google.gson.Gson;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import javax.net.ssl.*;
+import java.io.*;
 import java.net.Socket;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 
-public class ESP32MonitorClient
-{
-	//private Socket so;
-	private static String host = null;
-	private static int portHttp;
-	private static int portSo;
-	public static GUI window;
-	//private BufferedReader in = null;
-	private static BufferedReader inSo;
-	private static PrintWriter outSo;
-	public static void main(String[] args)
-	{
-		Socket so = null;
-		host = args[0];
-		portSo = 5000;
-		portHttp = 80;
-		try 
-		{
-			so = new Socket(host, portSo);
-		}
-		catch(IOException e) {
-			System.out.println(e);
-			System.exit(-1);
-		}
-		
-		try
-		{
-			BufferedReader in = new  BufferedReader(
-					new InputStreamReader(System.in));
-			inSo = new BufferedReader(
-					new InputStreamReader(so.getInputStream()));
-		outSo = new PrintWriter(so.getOutputStream(), true);
-		System.out.println("> Input:");
-		String input;
-		new Thread()
-		{
-			public void run()
-			{
-				window = new GUI();
-			}
-		}.start();
-		
-		window = new GUI();
-		while((input = in.readLine()) != null && !input.equals("quit")) {
-			outSo.println(input);
-			System.out.println("> Answer from Server: ");
-			String line;
-			while ((line = inSo.readLine()) != null || true) {
-			    System.out.println(line);
-			}
-			System.out.println("> Input: ");
-		}
-		while(!input.equals("quit")) {}
-		in.close();
-		so.close();
-					
-		}
-		catch(IOException e)
-		{
-			System.out.println(e);
-			System.exit(-1);
-		}
-	}
-	
-	public static String sendGETRequest(String uri) {
-	    try (Socket socket = new Socket(host, portHttp);
-	         PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-	         BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+public class ESP32MonitorClient {
 
-	        StringBuilder request = new StringBuilder("GET " + uri + " HTTP/1.1\n");
-	        request.append("Host: ").append(host).append("\n");
-	        request.append("Connection: close\n\n"); // Explicitly ask to close
+    public static void main(String[] args) throws Exception {
+        // Disable certificate validation (INSECURE)
+        TrustManager[] trustAllCerts = new TrustManager[]{
+            new X509TrustManager() {
+                public void checkClientTrusted(X509Certificate[] certs, String authType) {}
+                public void checkServerTrusted(X509Certificate[] certs, String authType) {}
+                public X509Certificate[] getAcceptedIssuers() { return null; }
+            }
+        };
 
-	        out.println(request.toString());
+        SSLContext sc = SSLContext.getInstance("TLS");
+        sc.init(null, trustAllCerts, new SecureRandom());
+        SSLSocketFactory factory = sc.getSocketFactory();
 
-	        String line;
-	        StringBuilder response = new StringBuilder("");
-	        while ((line = in.readLine()) != null) {
-	            System.out.println(line);
-	            response.append(line);
-	        }
-	        return response.toString();
-	        
-	    } catch (IOException e) {
-	        System.out.println(e.getMessage());
-	    }
-	    return null;
-	}
-	
-	public static void getSysData()
-	{
-		try {
-			String response = sendGETRequest("/systemdata");
-			String responseBody = "";
-			if(response.contains("200 OK"))
-			{
-				responseBody = response.substring(response.indexOf('{'));
-			}	
-			SystemInfo info = new SystemInfo(responseBody);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-	}
-	
-	public static void setON()
-	{
-		try {
-			sendGETRequest("/H");
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-	}
-	
-	public static void setOFF()
-	{
-		try {
-			sendGETRequest("/L");
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-	}
-	
-	public static void startMonitor()
-	{
-		try {
-			sendGETRequest("/startmonitor");
-		} catch(Exception e)
-		{
-			e.printStackTrace();
-		}
-	}
-	public static void stopMonitor()
-	{
-		try {
-			sendGETRequest("/stopmonitor");
-		} catch(Exception e)
-		{
-			e.printStackTrace();
-		}
-	}
+        try (SSLSocket socket = (SSLSocket) factory.createSocket("192.168.178.74", 4433)) {
+            socket.startHandshake();
+            PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())));
+            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+            out.println("/start-monitor");
+            out.flush();
+
+            // Read response
+            String line;
+            while ((line = in.readLine()) != null) {
+                System.out.println(line);
+                if (line.isEmpty()) break;
+            }
+            while ((line = in.readLine()) != null) {
+                System.out.println(line);
+            }
+        }
+    }
 }

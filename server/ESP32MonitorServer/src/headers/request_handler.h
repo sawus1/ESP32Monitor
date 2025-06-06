@@ -1,29 +1,32 @@
-#include <Arduino.h>
-#include "headers/systemdata.h"
-#include "headers/monitoringdata.h"
-#include <bits/stdc++.h>
-std::string executeCommand(String command)
+#include "systemdata.h"
+#include "monitoringdata.h"
+#include <sstream>
+#include <regex>
+
+
+static int uart_readline(char*, int);
+static const char* COMM_TAG = "COMMAND";
+
+std::string executeCommand(const std::string& command)
 {
-    Serial.println(command);
+    ESP_LOGI(COMM_TAG, "%s", (command + '\n').c_str());
+    std::string response;
+    char line[512];
 
-    // Wait for response with timeout
-    unsigned long timeout = millis() + 3000;  // 3 seconds
-    while (!Serial.available() && millis() < timeout) {
-        delay(1);
+    while (true) {
+        int len = uart_readline(line, sizeof(line));
+        if (len > 0) {
+            response += line;
+            response += '\n';
+            if(response.find("$") != std::string::npos) {
+                response.erase(response.find("$"));
+                break;
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 
-    if (!Serial.available()) {
-        return "ERROR: No response from serial";
-    }
-
-    // Read response until delimiter
-    String result = Serial.readStringUntil('$');
-    if (result.length() == 0) {
-        return "ERROR: Empty response";
-    }
-
-    // Convert to std::string
-    return std::string(result.c_str());
+    return response.empty() ? "ERROR" : response;
 }
 
 
@@ -175,7 +178,7 @@ monitoringdata::CPUStat getCpuStat()
     std::stringstream s(result);
     std::string tmp;
     char del = ' ';
-    byte i = 0;
+    uint8_t i = 0;
     s >> tmp;  // read and discard "cpu"
     for (int i=0; i<10; i++) {
         s >> params[i];
@@ -200,14 +203,13 @@ monitoringdata::MemoryInfo getMemInfo()
     monitoringdata::MemoryInfo info;
     std::string result = executeCommand("cat /proc/meminfo | grep -E 'MemTotal|SwapFree|Buffers|^Cached|MemFree|SwapTotal'");
 
-    if(result.find("ERROR") == 0 ){
+    if (result.find("ERROR") == 0) {
         info.Buffers = 0;
         info.MemFree = 0;
         info.MemTotal = 0;
-        info.Cached =0;
+        info.Cached = 0;
         info.SwapTotal = 0;
         info.SwapFree = 0;
-
         return info;
     }
 
@@ -215,15 +217,25 @@ monitoringdata::MemoryInfo getMemInfo()
     std::string line;
     std::map<std::string, unsigned long> parsed;
 
-    while(std::getline(stream, line)){
+    while (std::getline(stream, line)) {
         size_t dl = line.find(":");
-        if(dl != std::string::npos)
-        {
+        if (dl != std::string::npos) {
             std::string key = line.substr(0, dl);
-            unsigned long value = stoul(line.substr(dl + 1));
+            std::string val = line.substr(dl + 1);
+            
+            // Trim left
+            val.erase(0, val.find_first_not_of(" \t"));
+            // Stop at first non-digit
+            size_t end = val.find_first_not_of("0123456789");
+            std::string number_str = val.substr(0, end);
 
-            parsed[key] = value;
-
+            if (!number_str.empty()) {
+                char* endptr = nullptr;
+                unsigned long value = strtoul(number_str.c_str(), &endptr, 10);
+                if (endptr != number_str.c_str()) {
+                    parsed[key] = value;
+                }
+            }
         }
     }
 
@@ -241,7 +253,6 @@ std::vector<monitoringdata::DiskUsage> getDiskUsage()
 {
     std::string response = executeCommand("df -k --output=source,size,used,avail,pcent,target");
     std::vector<monitoringdata::DiskUsage> usage;
-
     if (response.find("ERROR") == 0 || response.empty()) {
         usage.push_back(monitoringdata::DiskUsage{
             .filesystem = "unknown",
@@ -253,7 +264,6 @@ std::vector<monitoringdata::DiskUsage> getDiskUsage()
         });
         return usage;
     }
-
     std::stringstream stream(response);
     std::string line;
 
@@ -264,36 +274,51 @@ std::vector<monitoringdata::DiskUsage> getDiskUsage()
         if (line.empty()) continue;
 
         std::istringstream linestream(line);
-        std::string filesystem, size_str, used_str, avail_str, use_str, mount;
+        std::vector<std::string> tokens;
+        std::string token;
 
-        linestream >> filesystem >> size_str >> used_str >> avail_str >> use_str >> mount;
+        while (linestream >> token) {
+            tokens.push_back(token);
+        }
 
-        try {
-            monitoringdata::DiskUsage dusage;
-            dusage.filesystem = filesystem;
-            dusage.size = std::stoll(size_str);
-            dusage.used = std::stoll(used_str);
-            dusage.available = std::stoll(avail_str);
-
-            // Strip '%' from use_str
-            use_str.erase(std::remove(use_str.begin(), use_str.end(), '%'), use_str.end());
-            dusage.use_percent = std::stoi(use_str);
-
-            dusage.mount_point = mount;
-
-            usage.push_back(dusage);
-        } catch (...) {
-            // Skip line if any conversion fails
+        if (tokens.size() < 6) {
+            ESP_LOGW("MONITOR", "Malformed line: %s", line.c_str());
             continue;
         }
-    }
 
+        monitoringdata::DiskUsage dusage;
+        dusage.filesystem = tokens[0];
+
+        char* end;
+        dusage.size = std::strtoll(tokens[1].c_str(), &end, 10);
+        if (*end != '\0') continue;
+
+        dusage.used = std::strtoll(tokens[2].c_str(), &end, 10);
+        if (*end != '\0') continue;
+
+        dusage.available = std::strtoll(tokens[3].c_str(), &end, 10);
+        if (*end != '\0') continue;
+
+        std::string use_str = tokens[4];
+        use_str.erase(std::remove(use_str.begin(), use_str.end(), '%'), use_str.end());
+        dusage.use_percent = std::strtol(use_str.c_str(), &end, 10);
+        if (*end != '\0') continue;
+
+        // Reconstruct mount point
+        dusage.mount_point = tokens[5];
+        for (size_t i = 6; i < tokens.size(); ++i) {
+            dusage.mount_point += " " + tokens[i];
+        }
+
+        usage.push_back(dusage);
+    }
     return usage;
 }
 
-monitoringdata::ProcessInfo getProcessInfo(String pid){
+monitoringdata::ProcessInfo getProcessInfo(std::string pid){
     monitoringdata::ProcessInfo info;
-    std::string result = executeCommand("ls /proc/" + pid + "/status | grep -E 'Name|State|Pid|PPid|Threads|VmSize|VmRSS|VmSwap'");
+    pid.replace(pid.find('\n'), 1, "");
+    std::string result = executeCommand("cat /proc/" + pid + "/status | grep -E 'Name|State|Pid|PPid|Threads|VmSize|VmRSS|VmSwap'");
 
     if(result.find("ERROR") == 0){
         info.name = "unknown";
@@ -337,7 +362,7 @@ monitoringdata::ProcessInfo getProcessInfo(String pid){
     return info;
 }
 
-bool killProcess(String pid)
+bool killProcess(std::string pid)
 {
     std::string result = executeCommand("sudo kill " + pid);
     if(result.find("ERROR") == 0)
@@ -440,8 +465,8 @@ monitoringdata::SystemLoadData getSystemLoadData()
     monitoringdata::SystemLoadData data;
     data.memory = getMemInfo();
     data.cpu_stat = getCpuStat();
+    data.disk_usage = getDiskUsage();
     data.network_interfaces = getNetworkInfo();
     data.processes = getProcesses();
-    data.disk_usage = getDiskUsage();
     return data;
 }

@@ -1,7 +1,3 @@
-#include <vector>
-#include <string>
-#include <map>
-
 namespace systemdata
 {
     struct kernel_info{
@@ -31,33 +27,38 @@ namespace systemdata
         std::vector<cpu_info> cpu;
         os_info os;
 
-        void serializeSystemInfo(JsonDocument& doc) {
-            doc["datatype"] = "system_info";
-            // kernel
-            JsonObject Jkernel = doc.createNestedObject("kernel");
-            Jkernel["version"] = kernel.version.c_str();
-            Jkernel["architecture"] = kernel.architecture.c_str();
+        void serializeSystemInfo(cJSON* root) {
+            cJSON_AddStringToObject(root, "datatype", "system_info");
 
-            // cpu
-            JsonArray Jcpus = doc.createNestedArray("processors");
+            // Kernel
+            cJSON* Jkernel = cJSON_CreateObject();
+            cJSON_AddItemToObject(root, "kernel", Jkernel);
+            cJSON_AddStringToObject(Jkernel, "version", kernel.version.c_str());
+            cJSON_AddStringToObject(Jkernel, "architecture", kernel.architecture.c_str());
+
+            // CPU
+            cJSON* Jcpus = cJSON_CreateArray();
+            cJSON_AddItemToObject(root, "processors", Jcpus);
             for (const auto& cpu : this->cpu) {
-                JsonObject Jcpu = Jcpus.createNestedObject();
-                Jcpu["model_name"] = cpu.model_name.c_str();
-                Jcpu["cores"] = cpu.cores;
-                Jcpu["cache_size"] = cpu.cache_size;
-                Jcpu["cpu_mhz"] = cpu.cpu_mhz;
-                Jcpu["vendor"] = cpu.vendor.c_str();
+                cJSON* Jcpu = cJSON_CreateObject();
+                cJSON_AddStringToObject(Jcpu, "model_name", cpu.model_name.c_str());
+                cJSON_AddNumberToObject(Jcpu, "cores", cpu.cores);
+                cJSON_AddNumberToObject(Jcpu, "cache_size", cpu.cache_size);
+                cJSON_AddNumberToObject(Jcpu, "cpu_mhz", cpu.cpu_mhz);
+                cJSON_AddStringToObject(Jcpu, "vendor", cpu.vendor.c_str());
+                cJSON_AddItemToArray(Jcpus, Jcpu);
             }
 
-            // os
-            JsonObject Jos = doc.createNestedObject("os");
-            Jos["name"] = os.name.c_str();
-            Jos["version"] = os.version.c_str();
-            Jos["id"] = os.id.c_str();
-            Jos["id_like"] = os.id_like.c_str();
-            Jos["pretty_name"] = os.pretty_name.c_str();
-            Jos["version_id"] = os.version_id.c_str();
-}
+            // OS
+            cJSON* Jos = cJSON_CreateObject();
+            cJSON_AddItemToObject(root, "os", Jos);
+            cJSON_AddStringToObject(Jos, "name", os.name.c_str());
+            cJSON_AddStringToObject(Jos, "version", os.version.c_str());
+            cJSON_AddStringToObject(Jos, "id", os.id.c_str());
+            cJSON_AddStringToObject(Jos, "id_like", os.id_like.c_str());
+            cJSON_AddStringToObject(Jos, "pretty_name", os.pretty_name.c_str());
+            cJSON_AddStringToObject(Jos, "version_id", os.version_id.c_str());
+        }
     };
 }
 
