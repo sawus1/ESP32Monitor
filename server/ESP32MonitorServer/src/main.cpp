@@ -47,7 +47,6 @@ extern "C" void app_main(void);
 static void wifi_event_handler(void*, esp_event_base_t, int32_t, void*);
 static esp_err_t wifi_init_sta(const char*, const char*);
 static void uart_init(void);
-static int uart_readline(char*, int);
 static void tls_server_task(void*);
 static const char* message_handler(const std::string& msg, mbedtls_ssl_context* ssl);
 int ssl_write_all(mbedtls_ssl_context *ssl, const unsigned char *buf, size_t len);
@@ -256,13 +255,12 @@ static void tls_server_task(void* pvParameters)
 
                 if (msg.find("/disconnect") != std::string::npos) break;
 
-                const char *response = message_handler(msg, &ssl);
-                if (response) {
+                const char *result = message_handler(msg, &ssl);
+                if (result) {
                     if (xSemaphoreTake(ssl_mutex, portMAX_DELAY) == pdTRUE) {
-                        mbedtls_ssl_write(&ssl, (const unsigned char*)response, strlen(response));
+                        ssl_write_all(&ssl, (const unsigned char*)result, strlen(result));
                         xSemaphoreGive(ssl_mutex);
                     }
-                    free((void*)response);
                 }
             }
         } else {
@@ -338,8 +336,13 @@ static const char* message_handler(const std::string& msg, mbedtls_ssl_context* 
 
 int ssl_write_all(mbedtls_ssl_context *ssl, const unsigned char *buf, size_t len) {
     size_t written = 0;
-    while (written < len) {
-        int ret = mbedtls_ssl_write(ssl, buf + written, len - written);
+    char* msg = new char[len + 2];
+    strcpy(msg, (char*)buf);
+    msg[len] = '\n';
+    msg[len+1] = '\0';
+
+    while (written < len + 2) {
+        int ret = mbedtls_ssl_write(ssl, (const unsigned char *)msg + written, len - written + 2);
         if (ret > 0) {
             written += ret;
         } else if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE) {
@@ -347,9 +350,11 @@ int ssl_write_all(mbedtls_ssl_context *ssl, const unsigned char *buf, size_t len
             continue;
         } else {
             ESP_LOGE(TAG_SERVER, "ssl_write failed: -0x%x", -ret);
+            delete[] msg;
             return ret; // error
         }
     }
+    delete[] msg;
     return written;
 }
 

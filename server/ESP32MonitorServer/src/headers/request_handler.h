@@ -61,45 +61,63 @@ std::vector<systemdata::cpu_info> getCpuInfo()
     std::stringstream stream(response);
     std::string line;
     std::map<std::string, std::string> cpu_block;
+
     while (std::getline(stream, line)) {
-        if (line.empty()) {
-            // Process one CPU block
-            systemdata::cpu_info info;
-            info.model_name = cpu_block["model name"];
-            info.cpu_mhz = cpu_block.count("cpu MHz") ? std::stod(cpu_block["cpu MHz"]) : 0.0;
-            info.cores = cpu_block.count("cpu cores") ? std::stoi(cpu_block["cpu cores"]) : 1;
-            info.cache_size = cpu_block.count("cache size") ? std::stoi(cpu_block["cache size"]) : 0;
-            info.vendor = cpu_block["vendor_id"];
-            cpus.push_back(info);
-            cpu_block.clear();
-        } else {
-            size_t colon = line.find(':');
-            if (colon != std::string::npos) {
-                std::string key = line.substr(0, colon);
-                std::string value = line.substr(colon + 1);
-                // trim
-                key.erase(0, key.find_first_not_of(" \t"));
-                key.erase(key.find_last_not_of(" \t") + 1);
-                value.erase(0, value.find_first_not_of(" \t"));
-                value.erase(value.find_last_not_of(" \t") + 1);
-                cpu_block[key] = value;
+        size_t colon = line.find(':');
+        if (colon != std::string::npos) {
+            std::string key = line.substr(0, colon);
+            std::string value = line.substr(colon + 1);
+            key.erase(0, key.find_first_not_of(" \t"));
+            key.erase(key.find_last_not_of(" \t") + 1);
+            value.erase(0, value.find_first_not_of(" \t"));
+            value.erase(value.find_last_not_of(" \t") + 1);
+
+            if (key == "processor" && !cpu_block.empty()) {
+                // Finish previous block
+                systemdata::cpu_info info;
+                info.model_name = cpu_block["model name"];
+                info.cpu_mhz = cpu_block.count("cpu MHz") ? std::stod(cpu_block["cpu MHz"]) : 0.0;
+                info.cores = cpu_block.count("cpu cores") ? std::stoi(cpu_block["cpu cores"]) : 1;
+                if (cpu_block.count("cache size")) {
+                    std::string cache = cpu_block["cache size"];
+                    size_t kb_pos = cache.find(" KB");
+                    if (kb_pos != std::string::npos)
+                        cache = cache.substr(0, kb_pos);
+                    info.cache_size = std::stoi(cache);
+                } else {
+                    info.cache_size = 0;
+                }
+                info.vendor = cpu_block["vendor_id"];
+                cpus.push_back(info);
+                cpu_block.clear();
             }
+
+            cpu_block[key] = value;
         }
     }
 
-    // Handle last block (in case file doesn't end with empty line)
+    // Handle final CPU block
     if (!cpu_block.empty()) {
         systemdata::cpu_info info;
         info.model_name = cpu_block["model name"];
         info.cpu_mhz = cpu_block.count("cpu MHz") ? std::stod(cpu_block["cpu MHz"]) : 0.0;
         info.cores = cpu_block.count("cpu cores") ? std::stoi(cpu_block["cpu cores"]) : 1;
-        info.cache_size = cpu_block.count("cache size") ? std::stoi(cpu_block["cache size"]) : 0;
+        if (cpu_block.count("cache size")) {
+            std::string cache = cpu_block["cache size"];
+            size_t kb_pos = cache.find(" KB");
+            if (kb_pos != std::string::npos)
+                cache = cache.substr(0, kb_pos);
+            info.cache_size = std::stoi(cache);
+        } else {
+            info.cache_size = 0;
+        }
         info.vendor = cpu_block["vendor_id"];
         cpus.push_back(info);
     }
 
     return cpus;
 }
+
 
 
 
@@ -177,8 +195,6 @@ monitoringdata::CPUStat getCpuStat()
     unsigned long params[10];
     std::stringstream s(result);
     std::string tmp;
-    char del = ' ';
-    uint8_t i = 0;
     s >> tmp;  // read and discard "cpu"
     for (int i=0; i<10; i++) {
         s >> params[i];
