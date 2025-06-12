@@ -1,3 +1,9 @@
+#pragma once
+#include<string>
+#include<cJSON.h>
+#include<vector>
+#include<map>
+
 namespace monitoringdata
 {
 
