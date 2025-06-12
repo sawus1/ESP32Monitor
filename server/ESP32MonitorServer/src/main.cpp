@@ -28,6 +28,7 @@
 #include "headers/request_handler.h"
 
 #define LED_GPIO GPIO_NUM_2
+#define VBUS_GPIO GPIO_NUM_0
 #define UART_PORT UART_NUM_0
 #define BUF_SIZE 4096
 #define RX_BUF_SIZE 512
@@ -40,6 +41,10 @@ static EventGroupHandle_t s_wifi_event_group;
 static TaskHandle_t monitor_task_handle = NULL;
 static mbedtls_ssl_context* monitor_ssl = NULL;
 static SemaphoreHandle_t ssl_mutex = NULL;
+static bool uart_connected = true;
+static TickType_t last_uart_activity = 0;
+static const TickType_t UART_TIMEOUT_TICKS = pdMS_TO_TICKS(5000);
+
 
 extern "C" void app_main(void);
 
@@ -47,7 +52,9 @@ extern "C" void app_main(void);
 static void wifi_event_handler(void*, esp_event_base_t, int32_t, void*);
 static esp_err_t wifi_init_sta(const char*, const char*);
 static void uart_init(void);
+static void init_vbus_gpio(void);
 static void tls_server_task(void*);
+static void uart_monitor_task(void* arg);
 static const char* message_handler(const std::string& msg, mbedtls_ssl_context* ssl);
 int ssl_write_all(mbedtls_ssl_context *ssl, const unsigned char *buf, size_t len);
 
@@ -84,6 +91,48 @@ extern "C" void app_main(void)
     xTaskCreate(&tls_server_task, "tls_server_task", 8192, NULL, 5, NULL);
 }
 
+static void uart_monitor_task(void* arg)
+{
+    char line[256];
+    while (true) {
+        int len = uart_readline(line, sizeof(line));
+        TickType_t now = xTaskGetTickCount();
+
+        if (len > 0) {
+            last_uart_activity = now;
+
+            if (!uart_connected) {
+                uart_connected = true;
+                ESP_LOGI(TAG, "UART reconnected");
+            }
+
+            if (strcmp(line, "CheckConn") == 0) {
+                const char *response = xEventGroupGetBits(s_wifi_event_group) & WIFI_CONNECTED_BIT
+                                       ? "WiFiConnected\n"
+                                       : "WiFiDisconnected\n";
+                uart_write_bytes(UART_PORT, response, strlen(response));
+            }
+            int level = gpio_get_level(VBUS_GPIO);
+            if (level != 1 &&(monitor_ssl != NULL && ssl_mutex != NULL)) {
+                cJSON *root = cJSON_CreateObject();
+                cJSON_AddStringToObject(root, "datatype", "device_message");
+                cJSON_AddStringToObject(root, "message", "Device not powered from USB. Is system running?");
+                char *json_str = cJSON_PrintUnformatted(root);
+                cJSON_Delete(root);
+
+                if (xSemaphoreTake(ssl_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+                    ssl_write_all(monitor_ssl, (const unsigned char*)json_str, strlen(json_str));
+                    xSemaphoreGive(ssl_mutex);
+                }
+                free(json_str);
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
+
 static void monitor_task(void* arg)
 {
     mbedtls_ssl_context* ssl = (mbedtls_ssl_context*)arg;
@@ -111,6 +160,18 @@ static void monitor_task(void* arg)
     monitor_task_handle = NULL;
     monitor_ssl = NULL;
     vTaskDelete(NULL);
+}
+
+void init_vbus_gpio(void)
+{
+    gpio_config_t io_conf = {
+        .pin_bit_mask = 1ULL << VBUS_GPIO,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&io_conf);
 }
 
 // UART Setup

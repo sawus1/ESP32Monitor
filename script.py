@@ -19,34 +19,50 @@ while not port:
 
 print(f"ESP32 detected on port {port}!\n")
 
-ser = serial.Serial(port=port, baudrate=115200, timeout=None)
+ser = serial.Serial(port=port, baudrate=115200, timeout=3)
 time.sleep(2)
 
-# WiFi provisioning loop
-while True:
-    wlan = input("\nPlease write your WLAN Name: ")
-    password = input("\nPlease write your WLAN Password: ")
-    ser.write(f'{wlan},{password}\r\n'.encode())
-    time.sleep(1)
-
+# --- Check Wi-Fi connection ---
+ser.write(b"CheckConn\n")
+time.sleep(0.5)
+wifi_connected = False
+while not wifi_connected:
     response = ser.readline().decode(errors="replace").strip()
-    print(response)
-    while 'Connected to Wi-Fi' not in response:
-        response = ser.readline().decode(errors="replace").strip()
-        print(response)
-        if 'Wi-Fi connection failed' in response:
-            print('Failed to connect. Please try again.')
-    if 'Connected to Wi-Fi' in response:
-        print("Connected successfully")
+    print(f"Initial response: {response}")
+
+    if "WiFiConnected" in response:
+        print("ESP32 is already connected to Wi-Fi.")
+        wifi_connected = True
+    elif "Wi-Fi connection failed" in response:
+        print("ESP32 is not connected to Wi-Fi.")
         break
 
-# Command execution loop
+# --- Wi-Fi provisioning loop ---
+if not wifi_connected:
+    while True:
+        wlan = input("\nPlease write your WLAN Name: ")
+        password = input("\nPlease write your WLAN Password: ")
+        ser.write(f'{wlan},{password}\r\n'.encode())
+        time.sleep(1)
+
+        response = ser.readline().decode(errors="replace").strip()
+        print(response)
+        while 'Connected to Wi-Fi' not in response:
+            response = ser.readline().decode(errors="replace").strip()
+            print(response)
+            if 'Wi-Fi connection failed' in response:
+                print('Failed to connect. Please try again.')
+                break
+        if 'Connected to Wi-Fi' in response:
+            print("Connected successfully")
+            break
+
+# --- Command execution loop ---
 try:
     while True:
         line = ser.readline().decode(errors="replace").strip()
-        print(line)
-        if not line:
-            continue
+        if line:
+            print(line)
         if line.lower() in ['exit', 'quit']:
             print('\nExiting command mode.\n')
             break
@@ -59,7 +75,6 @@ try:
                 result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
                 output = result.stdout + result.stderr
                 if not output.strip():
-                    print("Executed without output")
                     output = "Command executed, but no output\n"
             except subprocess.TimeoutExpired:
                 output = "Error executing command: Command timed out.\n"
@@ -72,4 +87,5 @@ try:
 except KeyboardInterrupt:
     print('\nInterrupted by user. Exiting...')
 finally:
-    ser.close()  
+    ser.close()
+
