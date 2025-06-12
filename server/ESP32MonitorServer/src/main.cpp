@@ -4,6 +4,7 @@
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 #include "esp_event.h"
+#include <cJSON.h>
 
 
 #include "modules/wifi/wifi_manager.hpp"
@@ -17,6 +18,9 @@ TaskHandle_t monitor_task_handle = NULL;
 mbedtls_ssl_context* monitor_ssl = NULL;
 SemaphoreHandle_t ssl_mutex = NULL;
 EventGroupHandle_t s_wifi_event_group;
+bool conn_timeout = false;
+
+void device_state_task(void* arg);
 
 // Main Application
 extern "C" void app_main(void)
@@ -29,24 +33,70 @@ extern "C" void app_main(void)
         ESP_LOGE(TAG_SERVER, "Failed to create mutex");
         vTaskDelete(NULL);
     }
-    char line[256];
+    xTaskCreate(&device_state_task, "device_state_task", 8192, NULL, 5, NULL);
     while (true) {
-        int len = uart_readline(line, sizeof(line));
-        if (len > 0) {
-            ESP_LOGI(TAG, "Received line: %s", line);
-            char *ssid = strtok(line, ",");
-            char *password = strtok(NULL, ",");
-
-            if (wifi_init_sta(ssid, password) == ESP_OK) {
-                ESP_LOGI(TAG, "Connected to Wi-Fi");
-                break;
-            } else {
-                ESP_LOGI(TAG, "Wi-Fi connection failed");
-            }
-        }
+        if(check_connection()) break;
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
     gpio_set_level(LED_GPIO, 1);
     xTaskCreate(&tls_server_task, "tls_server_task", 8192, NULL, 5, NULL);
+}
+
+void device_state_task(void* arg)
+{
+    char line[256];
+    while (true) {
+        int len = uart_readline(line, sizeof(line));
+
+        if (len > 0) {
+            if (strcmp(line, "check_conn") == 0) {
+                const char *response = check_connection()
+                                       ? "WiFiConnected\n"
+                                       : "WiFiDisconnected\n";
+                uart_write_bytes(UART_PORT, response, strlen(response));
+            }
+            if(std::string(line).find(",") != std::string::npos)
+            {
+                ESP_LOGI(TAG, "Received line: %s", line);
+                char *ssid = strtok(line, ",");
+                char *password = strtok(NULL, ",");
+
+                if (wifi_init_sta(ssid, password) == ESP_OK) {
+                    ESP_LOGI(TAG, "Connected to Wi-Fi");
+                } else {
+                    ESP_LOGI(TAG, "Wi-Fi connection failed");
+                }
+            }
+        }
+        if (!uart_check_connection() &&(monitor_ssl != NULL && ssl_mutex != NULL)) {
+                cJSON *root = cJSON_CreateObject();
+                cJSON_AddStringToObject(root, "datatype", "device_message");
+                cJSON_AddStringToObject(root, "message", "Device not powered from USB. Is system running?");
+                char *json_str = cJSON_PrintUnformatted(root);
+                cJSON_Delete(root);
+
+                if (xSemaphoreTake(ssl_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+                    ssl_write_all(monitor_ssl, (const unsigned char*)json_str, strlen(json_str));
+                    xSemaphoreGive(ssl_mutex);
+                }
+                free(json_str);
+        }
+        if(conn_timeout) {
+            cJSON *root = cJSON_CreateObject();
+            cJSON_AddStringToObject(root, "datatype", "device_message");
+            cJSON_AddStringToObject(root, "message", "System not responding");
+            char *json_str = cJSON_PrintUnformatted(root);
+            cJSON_Delete(root);
+
+            if (xSemaphoreTake(ssl_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+                ssl_write_all(monitor_ssl, (const unsigned char*)json_str, strlen(json_str));
+                xSemaphoreGive(ssl_mutex);
+            }
+            free(json_str);
+            conn_timeout = false;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 }

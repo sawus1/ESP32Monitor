@@ -12,61 +12,71 @@ def ESP32_detect():
             return port.device
     return None
 
-port = ESP32_detect()
-while not port:
-    input("\nPlease insert the device and press ENTER\n")
+def wait_for_device():
     port = ESP32_detect()
+    while not port:
+        input("\nPlease insert the device and press ENTER\n")
+        port = ESP32_detect()
+    print(f"ESP32 detected on port {port}!\n")
+    return port
 
-print(f"ESP32 detected on port {port}!\n")
+def connect_to_serial(port):
+    while True:
+        try:
+            ser = serial.Serial(port=port, baudrate=115200, timeout=3)
+            time.sleep(2)
+            return ser
+        except serial.SerialException:
+            print(f"Failed to open port {port}. Retrying...")
+            time.sleep(2)
+            port = wait_for_device()
 
-ser = serial.Serial(port=port, baudrate=115200, timeout=3)
-time.sleep(2)
+def check_wifi_connection(ser):
+    time.sleep(0.5)
+    while True:
+        try:
+            ser.write(b"check_conn\n")
+            response = ser.readline().decode(errors="replace").strip()
+        except serial.SerialException:
+            raise ConnectionError("Lost connection while checking Wi-Fi.")
+        print(f"Initial response: {response}")
+        if "WiFiConnected" in response:
+            print("ESP32 is already connected to Wi-Fi.")
+            return True
+        elif "WiFiDisconnected" in response:
+            return False
 
-# --- Check Wi-Fi connection ---
-ser.write(b"CheckConn\n")
-time.sleep(0.5)
-wifi_connected = False
-while not wifi_connected:
-    response = ser.readline().decode(errors="replace").strip()
-    print(f"Initial response: {response}")
-
-    if "WiFiConnected" in response:
-        print("ESP32 is already connected to Wi-Fi.")
-        wifi_connected = True
-    elif "Wi-Fi connection failed" in response:
-        print("ESP32 is not connected to Wi-Fi.")
-        break
-
-# --- Wi-Fi provisioning loop ---
-if not wifi_connected:
+def provision_wifi(ser):
     while True:
         wlan = input("\nPlease write your WLAN Name: ")
         password = input("\nPlease write your WLAN Password: ")
         ser.write(f'{wlan},{password}\r\n'.encode())
         time.sleep(1)
 
-        response = ser.readline().decode(errors="replace").strip()
-        print(response)
-        while 'Connected to Wi-Fi' not in response:
-            response = ser.readline().decode(errors="replace").strip()
+        while True:
+            try:
+                response = ser.readline().decode(errors="replace").strip()
+            except serial.SerialException:
+                raise ConnectionError("Lost connection during Wi-Fi provisioning.")
             print(response)
-            if 'Wi-Fi connection failed' in response:
+            if 'Connected to Wi-Fi' in response:
+                print("Connected successfully")
+                return
+            elif 'Wi-Fi connection failed' in response:
                 print('Failed to connect. Please try again.')
                 break
-        if 'Connected to Wi-Fi' in response:
-            print("Connected successfully")
-            break
 
-# --- Command execution loop ---
-try:
+def main_loop(ser):
     while True:
-        line = ser.readline().decode(errors="replace").strip()
+        try:
+            line = ser.readline().decode(errors="replace").strip()
+        except serial.SerialException:
+            raise ConnectionError("Lost connection during command loop.")
         if line:
             print(line)
         if line.lower() in ['exit', 'quit']:
             print('\nExiting command mode.\n')
             break
-
         if "COMMAND" in line:
             idx = line.find("COMMAND:")
             cmd = line[idx + len("COMMAND: "):].strip()
@@ -80,12 +90,33 @@ try:
                 output = "Error executing command: Command timed out.\n"
             except Exception as e:
                 output = f"Error executing command: {str(e)}\n"
-
-            output += "$"  # Termination signal
+            output += "$"
             for line in output.splitlines():
                 ser.write((line[:250] + '\n').encode())
-except KeyboardInterrupt:
-    print('\nInterrupted by user. Exiting...')
-finally:
-    ser.close()
+
+while True:
+    try:
+        port = wait_for_device()
+        ser = connect_to_serial(port)
+
+        wifi_connected = check_wifi_connection(ser)
+        if not wifi_connected:
+            provision_wifi(ser)
+
+        main_loop(ser)
+
+    except ConnectionError as e:
+        print(f"\n{e}\nReinitializing connection...\n")
+        try:
+            ser.close()
+        except:
+            pass
+        time.sleep(2)
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Exiting...")
+        try:
+            ser.close()
+        except:
+            pass
+        break
 

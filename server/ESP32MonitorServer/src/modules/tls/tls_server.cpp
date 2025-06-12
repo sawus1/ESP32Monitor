@@ -75,8 +75,10 @@ void client_communication_loop(mbedtls_ssl_context *ssl) {
             if (xSemaphoreTake(ssl_mutex, portMAX_DELAY) == pdTRUE) {
                 ssl_write_all(ssl, (const unsigned char *)result, strlen(result));
                 xSemaphoreGive(ssl_mutex);
+                delete result;
             }
         }
+        delete result;
     }
 }
 

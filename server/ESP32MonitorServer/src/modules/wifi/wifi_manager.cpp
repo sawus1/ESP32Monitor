@@ -46,7 +46,11 @@ esp_err_t wifi_init_sta(const char* ssid, const char* password)
     return (bits & WIFI_CONNECTED_BIT) ? ESP_OK : ESP_FAIL;
 }
 
-bool checkConnection()
+bool check_connection()
 {
-    return xEventGroupGetBits(s_wifi_event_group) & WIFI_CONNECTED_BIT;
+    if(s_wifi_event_group != NULL)
+    {
+        return xEventGroupGetBits(s_wifi_event_group) & WIFI_CONNECTED_BIT;
+    }
+    return false;
 }
