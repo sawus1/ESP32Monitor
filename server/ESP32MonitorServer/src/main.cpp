@@ -56,7 +56,7 @@ void device_state_task(void* arg)
                                        : "WiFiDisconnected\n";
                 uart_write_bytes(UART_PORT, response, strlen(response));
             }
-            if(std::string(line).find(",") != std::string::npos)
+            if((std::string(line).find(",") != std::string::npos) && !check_connection())
             {
                 ESP_LOGI(TAG, "Received line: %s", line);
                 char *ssid = strtok(line, ",");
@@ -69,7 +69,9 @@ void device_state_task(void* arg)
                 }
             }
         }
+        //if(!uart_check_connection()) ESP_LOGW("POWER", "NO POWER ON GPIO4");
         if (!uart_check_connection() &&(monitor_ssl != NULL && ssl_mutex != NULL)) {
+                ESP_LOGW("POWER", "NO POWER ON GPIO4");
                 cJSON *root = cJSON_CreateObject();
                 cJSON_AddStringToObject(root, "datatype", "device_message");
                 cJSON_AddStringToObject(root, "message", "Device not powered from USB. Is system running?");

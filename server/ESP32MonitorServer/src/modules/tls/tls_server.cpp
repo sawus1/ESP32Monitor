@@ -75,10 +75,8 @@ void client_communication_loop(mbedtls_ssl_context *ssl) {
             if (xSemaphoreTake(ssl_mutex, portMAX_DELAY) == pdTRUE) {
                 ssl_write_all(ssl, (const unsigned char *)result, strlen(result));
                 xSemaphoreGive(ssl_mutex);
-                delete result;
             }
         }
-        delete result;
     }
 }
 
@@ -132,6 +130,7 @@ void tls_server_task(void *pvParameters) {
         vTaskDelete(NULL);
     }
 
+    monitor_ssl = &ssl;
     while (true) {
         handle_tls_client(&listen_fd, &ssl, &conf);
     }

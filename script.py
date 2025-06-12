@@ -85,15 +85,14 @@ def main_loop(ser):
                 result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
                 output = result.stdout + result.stderr
                 if not output.strip():
-                    output = "Command executed, but no output\n"
+                    output = "Command executed, but no output\n" 
+                output += "$"
+                for line in output.splitlines():
+                    ser.write((line[:250] + '\n').encode())
             except subprocess.TimeoutExpired:
-                output = "Error executing command: Command timed out.\n"
+                ser.write("Error executing command: Command timed out.\n").encode()
             except Exception as e:
-                output = f"Error executing command: {str(e)}\n"
-            output += "$"
-            for line in output.splitlines():
-                ser.write((line[:250] + '\n').encode())
-
+                ser.write(f"Error executing command: {str(e)}\n").encode()
 while True:
     try:
         port = wait_for_device()

@@ -18,6 +18,7 @@
 #define TAG_SERVER "TLS_SERVER"
 
 extern SemaphoreHandle_t ssl_mutex;
+extern mbedtls_ssl_context* monitor_ssl;
 extern char *message_handler(const std::string &msg, mbedtls_ssl_context *ssl);
 int ssl_write_all(mbedtls_ssl_context *ssl, const unsigned char *buf, size_t len);
 

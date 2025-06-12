@@ -9,6 +9,7 @@ std::string execute_command(const std::string& command)
     while (true) {
         int len = uart_readline(line, sizeof(line));
         if (len > 0) {
+            ESP_LOGI("LINE", "line: %s", line);
             response += line;
             response += '\n';
             if(response.find("$") != std::string::npos) {
@@ -43,7 +44,6 @@ char* message_handler(const std::string& msg, mbedtls_ssl_context* ssl)
     }
     if (msg.find("/start-monitor") != std::string::npos) {
         if (monitor_task_handle == NULL) {
-            monitor_ssl = ssl;
             xTaskCreate(&monitor_task, "monitor_task", 16384, (void*)ssl, 5, &monitor_task_handle);
             return strdup("Monitoring started");
         } else {
@@ -54,7 +54,6 @@ char* message_handler(const std::string& msg, mbedtls_ssl_context* ssl)
         if (monitor_task_handle != NULL) {
             vTaskDelete(monitor_task_handle);
             monitor_task_handle = NULL;
-            monitor_ssl = NULL;
             return strdup("Monitoring stopped");
         } else {
             return strdup("No monitoring task running");
@@ -97,6 +96,5 @@ void monitor_task(void* arg)
     }
 
     monitor_task_handle = NULL;
-    monitor_ssl = NULL;
     vTaskDelete(NULL);
 }
