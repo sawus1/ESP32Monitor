@@ -31,7 +31,6 @@ public class ClientThread extends Thread {
 		            String line = in.readLine();
 
 		            if (line == null) {
-		                // Stream has been closed on the remote side
 		                client.connectionUnavailable();
 		                break;
 		            }
@@ -52,6 +51,8 @@ public class ClientThread extends Thread {
 		                this.processProcInfo(line);
 		            } else if (line.contains("device_message")) {
 		            	this.processMessage(line);
+		            } else if (line.contains("script_execution")) {
+		            	this.processScriptExec(line);
 		            }
 		        } else {
 		            client.connectionUnavailable();
@@ -97,8 +98,12 @@ public class ClientThread extends Thread {
 	}
 	public void processMessage(String line)
 	{
-		Gson gson = new Gson();
-		ESP32Message msg = gson.fromJson(line, ESP32Message.class);
-		client.showDevMessage(msg.message);
+		String msg = line.substring(line.indexOf("message\" : \"") + 12, line.lastIndexOf("\""));
+		client.showDevMessage(msg);
+	}
+	public void processScriptExec(String line)
+	{
+		String res = line.substring(line.indexOf("result\" : \"") + 11, line.lastIndexOf("\""));
+		client.showDevMessage(res);
 	}
 }

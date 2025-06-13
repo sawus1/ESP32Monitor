@@ -85,6 +85,7 @@ public class ESP32MonitorClient extends JFrame{
     private JButton monitorStartButton, monitorStopButton, getSystemInfoButton, runButton, saveButton, exitButton, loadButton;
     private JTextField ipField;
     private String ip;
+    private boolean ignore; 
     
     
     
@@ -120,7 +121,7 @@ public class ESP32MonitorClient extends JFrame{
     	this.createControls();
     	this.setLocationRelativeTo(null);
     	this.setVisible(true);
-    	
+    	ignore = false;
     	
     }
 	public static void main(String[] args) {
@@ -236,7 +237,7 @@ public class ESP32MonitorClient extends JFrame{
 	    monitorStartButton = createStyledButton("▶ Start Monitoring", new Color(0, 102, 0));
 	    monitorStopButton = createStyledButton("■ Stop Monitoring", new Color(153, 0, 0));
 	    getSystemInfoButton = createStyledButton("🖥 Get System Info", new Color(0, 51, 102));
-	    runButton = createStyledButton("⚙ Run Command", new Color(51, 51, 51));
+	    runButton = createStyledButton("⚙ Run Script", new Color(51, 51, 51));
 	    saveButton = createStyledButton("💾 Save", new Color(0, 102, 204));
 	    loadButton = createStyledButton("Load", new Color(0, 102, 204));
 	    exitButton = createStyledButton("⏻ Exit", new Color(0, 0, 0));
@@ -246,15 +247,8 @@ public class ESP32MonitorClient extends JFrame{
 	    getSystemInfoButton.addActionListener(e -> getSystemInfo());
 	    exitButton.addActionListener(e -> {
 	    	stopMonitor();
-	        disconnectClient();
 	        t.setState(false);
-	        try {
-	            t.join();
-	        } catch (InterruptedException e1) {
-	            e1.printStackTrace();
-	            System.exit(-1);
-	        }
-	        System.exit(0);
+	        disconnectClient();
 	    });
 	    saveButton.addActionListener(e -> saveData());
 	    loadButton.addActionListener(e -> loadData());
@@ -371,7 +365,73 @@ public class ESP32MonitorClient extends JFrame{
 	}
 	public void showDevMessage(String msg)
 	{
-		JOptionPane.showMessageDialog(null, "Message from ESP32: " + msg);
+		JDialog dialog = new JDialog((JFrame)null, "ESP32 Monitor", true);
+	    dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+	    dialog.setSize(300, 150);
+	    dialog.setLayout(new BorderLayout(10, 10));
+
+
+	    JButton connectButton = new JButton("Retry");
+	    connectButton.addActionListener(e -> {
+	        resetConn();
+	        dialog.dispose();
+	    });
+	    JButton closeButton = new JButton("Exit");
+	    closeButton.addActionListener(e -> System.exit(0));
+
+	    JPanel buttonPanel = new JPanel();
+	    buttonPanel.add(connectButton);
+	    buttonPanel.add(closeButton);
+	    dialog.add(buttonPanel, BorderLayout.SOUTH);
+
+	    dialog.setLocationRelativeTo(null);
+	    dialog.setVisible(true);
+	}
+	
+	public void checkForAnomalies()
+	{
+		List<Integer> cpuLoadPercents = cpuLoadPanel.getDataPoints();
+		List<Integer> memoryLoadPercents = memUsagePanel.getDataPoints();
+		List<Integer> swapUsagePercents = swapUsagePanel.getDataPoints();
+		
+		if(cpuLoadPercents.size() > 12 && memoryLoadPercents.size() > 12 && swapUsagePercents.size() > 12)
+		{
+			int cpucnt = 0;
+			for(int i = cpuLoadPercents.size(); i > cpuLoadPercents.size() - 12; i--)
+			{
+				if(cpuLoadPercents.get(i) > 95) cpucnt++;
+			}
+			if(cpucnt > 10 && !ignore)
+			{
+				JOptionPane.showMessageDialog(null, "Cpu load anomaly detected");
+				ignore = true;
+			}
+			else if (cpucnt < 6) ignore = false;
+			
+			int memcnt = 0;
+			for(int i = memoryLoadPercents.size(); i > memoryLoadPercents.size() - 12; i--)
+			{
+				if(memoryLoadPercents.get(i) > 95) memcnt++;
+			}
+			if(memcnt > 10 && !ignore)
+			{
+				JOptionPane.showMessageDialog(null, "Memory usage anomaly detected");
+				ignore = true;
+			}
+			else if (cpucnt < 6) ignore = false;
+			
+			int swpcnt = 0;
+			for(int i = swapUsagePercents.size(); i > swapUsagePercents.size() - 12; i--)
+			{
+				if(swapUsagePercents.get(i) > 95) cpucnt++;
+			}
+			if(cpucnt > 10 && !ignore)
+			{
+				JOptionPane.showMessageDialog(null, "Swap usage anomaly detected");
+				ignore = true;
+			}
+			else if (cpucnt < 6) ignore = false;
+		}
 	}
 
 	public void displaySystemInfo() {
@@ -564,7 +624,7 @@ public class ESP32MonitorClient extends JFrame{
 						if (selected != null) {
 							try {
 								int pid = Integer.parseInt(selected.split(" - ")[0]);
-								getProcInfo(pid); // request server to send detailed info
+								getProcInfo(pid);
 							} catch (NumberFormatException ex) {
 								ex.printStackTrace();
 							}
@@ -611,28 +671,62 @@ public class ESP32MonitorClient extends JFrame{
 		frame.setLocationRelativeTo(this);
 		frame.setVisible(true);
 	}
-	public void startMonitor()
-	{
-		out.println("/start-monitor");
+	public void startMonitor() {
+		if (out != null && !out.checkError()) {
+			out.println("/start-monitor");
+		}
 	}
-	public void stopMonitor()
-	{
-		out.println("/stop-monitor");
+
+	public void stopMonitor() {
+		if (out != null && !out.checkError()) {
+			out.println("/stop-monitor");
+		}
 	}
-	public void getSystemInfo()
-	{
-		out.println("/get-sys-info");
+
+	public void getSystemInfo() {
+		if (out != null && !out.checkError()) {
+			out.println("/get-sys-info");
+		}
 	}
-	public void disconnectClient()
-	{
-		out.println("/disconnect");
+
+	public void disconnectClient() {
+		if (out != null && !out.checkError()) {
+			stopMonitor();
+			out.println("/disconnect");
+			try {
+				in.close();
+				out.close();
+				socket.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+				System.exit(-1);
+			}
+		}
+		System.exit(0);
 	}
-	public void killProc(int pid)
-	{
-		out.println("/kill-proc " + pid);
+
+	public void killProc(int pid) {
+		if (out != null && !out.checkError()) {
+			out.println("/kill-proc " + pid);
+		}
 	}
-	public void getProcInfo(int pid)
+
+	public void getProcInfo(int pid) {
+		if (out != null && !out.checkError()) {
+			out.println("/get-proc-info " + pid);
+		}
+	}
+	
+	public void resetConn()
 	{
-		out.println("/get-proc-info " + pid);
+		if(out != null && !out.checkError()) {
+			out.println("/reset-conn");
+		}
+	}
+	
+	public void executeScript(String path) {
+		if(out != null && !out.checkError()) {
+			out.println("/execute " + path);
+		}
 	}
 }

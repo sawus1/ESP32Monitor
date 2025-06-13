@@ -17,8 +17,11 @@
 TaskHandle_t monitor_task_handle = NULL;
 mbedtls_ssl_context* monitor_ssl = NULL;
 SemaphoreHandle_t ssl_mutex = NULL;
+SemaphoreHandle_t serial_mutex = NULL;
 EventGroupHandle_t s_wifi_event_group;
 bool conn_timeout = false;
+bool usb_disconnected = false;
+bool system_timeout = false;
 
 void device_state_task(void* arg);
 
@@ -29,6 +32,7 @@ extern "C" void app_main(void)
     uart_init();
     gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
     ssl_mutex = xSemaphoreCreateMutex();
+    serial_mutex = xSemaphoreCreateMutex();
     if (ssl_mutex == NULL) {
         ESP_LOGE(TAG_SERVER, "Failed to create mutex");
         vTaskDelete(NULL);
@@ -40,15 +44,18 @@ extern "C" void app_main(void)
     }
 
     gpio_set_level(LED_GPIO, 1);
-    xTaskCreate(&tls_server_task, "tls_server_task", 8192, NULL, 5, NULL);
+    xTaskCreate(&tls_server_task, "tls_server_task", 8192, NULL, 1, NULL);
 }
 
 void device_state_task(void* arg)
 {
     char line[256];
     while (true) {
-        int len = uart_readline(line, sizeof(line));
-
+        int len = 0;
+        if(xSemaphoreTake(serial_mutex, portMAX_DELAY)){
+            len = uart_readline(line, sizeof(line));
+            xSemaphoreGive(serial_mutex);
+        }
         if (len > 0) {
             if (strcmp(line, "check_conn") == 0) {
                 const char *response = check_connection()
@@ -70,8 +77,7 @@ void device_state_task(void* arg)
             }
         }
         //if(!uart_check_connection()) ESP_LOGW("POWER", "NO POWER ON GPIO4");
-        if (!uart_check_connection() &&(monitor_ssl != NULL && ssl_mutex != NULL)) {
-                ESP_LOGW("POWER", "NO POWER ON GPIO4");
+        if (!uart_check_connection() &&(monitor_ssl != NULL && ssl_mutex != NULL) && !usb_disconnected) {
                 cJSON *root = cJSON_CreateObject();
                 cJSON_AddStringToObject(root, "datatype", "device_message");
                 cJSON_AddStringToObject(root, "message", "Device not powered from USB. Is system running?");
@@ -83,22 +89,8 @@ void device_state_task(void* arg)
                     xSemaphoreGive(ssl_mutex);
                 }
                 free(json_str);
+                usb_disconnected = true;
         }
-        if(conn_timeout) {
-            cJSON *root = cJSON_CreateObject();
-            cJSON_AddStringToObject(root, "datatype", "device_message");
-            cJSON_AddStringToObject(root, "message", "System not responding");
-            char *json_str = cJSON_PrintUnformatted(root);
-            cJSON_Delete(root);
-
-            if (xSemaphoreTake(ssl_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
-                ssl_write_all(monitor_ssl, (const unsigned char*)json_str, strlen(json_str));
-                xSemaphoreGive(ssl_mutex);
-            }
-            free(json_str);
-            conn_timeout = false;
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }

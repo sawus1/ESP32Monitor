@@ -20,6 +20,9 @@ extern int uart_readline(char*, int);
 extern TaskHandle_t monitor_task_handle;
 extern mbedtls_ssl_context* monitor_ssl;
 extern SemaphoreHandle_t ssl_mutex;
+extern SemaphoreHandle_t serial_mutex;
+extern bool conn_timeout;
+extern bool usb_disconnected;
 
 extern int ssl_write_all(mbedtls_ssl_context *ssl, const unsigned char *buf, size_t len);
 void monitor_task(void* arg);
