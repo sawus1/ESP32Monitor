@@ -12,9 +12,11 @@
 #include "system_data_request_handler.hpp"
 #include "system_info_request_handler.hpp"
 #include <freertos/semphr.h>
+#include "driver/uart.h" 
 
 const char* COMM_TAG = "COMMAND";
 #define TAG_SERVER "TLS_SERVER"
+#define UART_PORT UART_NUM_0
 extern int uart_readline(char*, int);
 
 extern TaskHandle_t monitor_task_handle;

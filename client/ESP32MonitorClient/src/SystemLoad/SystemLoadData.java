@@ -1,8 +1,8 @@
+package SystemLoad;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import java.util.List;
 import java.util.Map;
-import SystemLoad.*;
 
 public class SystemLoadData {
     private String datatype;

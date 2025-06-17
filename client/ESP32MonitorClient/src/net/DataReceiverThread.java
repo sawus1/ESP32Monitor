@@ -1,27 +1,37 @@
+package net;
+
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.SocketTimeoutException;
 
 import javax.net.ssl.SSLSocket;
 
 import com.google.gson.Gson;
 
+import SystemInfo.SystemInfo;
 import SystemLoad.ProcessInfo;
+import SystemLoad.SystemLoadData;
+import common.ESP32Message;
+import ui.MainClientFrame;
 
-public class ClientThread extends Thread {
-	
+public class DataReceiverThread extends Thread{
 	private BufferedReader in;
 	private boolean state;
-	private ESP32MonitorClient client;
+	private ConnectionManager conn;
 	private SSLSocket s;
+	private MainClientFrame frame;
 	
-	public ClientThread(ESP32MonitorClient client)
+	public DataReceiverThread(ConnectionManager conn, MainClientFrame frame)
 	{
-		this.s = client.getSocket();
-		this.in = client.getInput();
-		this.client = client;
+		this.s = conn.getSocket();
+		this.in = conn.getInput();
+		this.conn = conn;
 		state = true;
+		this.frame = frame;
 	}
+	
+	public ConnectionManager getConnection() {return conn;}
 	
 	@Override
 	public void run() {
@@ -31,8 +41,7 @@ public class ClientThread extends Thread {
 		            String line = in.readLine();
 
 		            if (line == null) {
-		                // Stream has been closed on the remote side
-		                client.connectionUnavailable();
+		            	conn.connectionUnavailable();
 		                break;
 		            }
 
@@ -52,18 +61,20 @@ public class ClientThread extends Thread {
 		                this.processProcInfo(line);
 		            } else if (line.contains("device_message")) {
 		            	this.processMessage(line);
+		            } else if (line.contains("script_execution")) {
+		            	this.processScriptExec(line);
 		            }
 		        } else {
-		            client.connectionUnavailable();
+		        	conn.connectionUnavailable();
 		            break;
 		        }
 		    } catch (SocketTimeoutException e) {
 		        System.out.println("Connection timeout");
-		        client.connTimeout();
+		        conn.connTimeout();
 		        break;
 		    } catch (IOException e) {
 		        System.out.println("IOException during read: " + e.getMessage());
-		        client.connectionUnavailable();
+		        conn.connectionUnavailable();
 		        break;
 		    }
 		}
@@ -79,26 +90,32 @@ public class ClientThread extends Thread {
 	{
 		Gson gson = new Gson();
 		SystemInfo info = gson.fromJson(line, SystemInfo.class);
-		client.setSysInfo(info);
-		client.displaySystemInfo();
+		frame.setSystemInfo(info);
+		frame.displaySystemInfo();
 	}
 	public void processSystemLoad(String line)
 	{
 		Gson gson = new Gson();
 		SystemLoadData data = gson.fromJson(line, SystemLoadData.class);
-		client.setSysLoad(data);
-		client.displaySystemLoadData();
+		frame.setSystemLoad(data);
+		frame.displaySystemLoadData();
 	}
 	public void processProcInfo(String line)
 	{
 		Gson gson = new Gson();
 		ProcessInfo info = gson.fromJson(line, ProcessInfo.class);
-		client.displayProcessInfo(info.getProc());
+		frame.displayProcessInfo(info.getProc());
 	}
 	public void processMessage(String line)
 	{
 		Gson gson = new Gson();
 		ESP32Message msg = gson.fromJson(line, ESP32Message.class);
-		client.showDevMessage(msg.message);
+		frame.showDevMessage(msg.getMessage());
+	}
+	public void processScriptExec(String line)
+	{
+		Gson gson = new Gson();
+		ESP32Message msg = gson.fromJson(line, ESP32Message.class);
+		frame.showDevMessage(msg.getResult());
 	}
 }

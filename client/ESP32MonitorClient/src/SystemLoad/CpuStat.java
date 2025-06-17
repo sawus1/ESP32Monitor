@@ -27,12 +27,12 @@ public class CpuStat {
     public long getGuest() { return guest; }
     public long getGuestNice() { return guestNice; }
     
-    public long getIdleTime() {
+    private long getIdleTime() {
         return idle + iowait;
     }
 
-    public long getTotalTime() {
-        return user + nice + system + idle + iowait + irq + softirq + steal; // usually exclude guest
+    private long getTotalTime() {
+        return user + nice + system + idle + iowait + irq + softirq + steal;
     }
 
     public static double computeCpuUsage(CpuStat prev, CpuStat curr) {

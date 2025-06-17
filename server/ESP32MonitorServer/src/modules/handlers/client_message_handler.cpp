@@ -9,7 +9,7 @@ std::string execute_command(const std::string& command){
     if (!conn_timeout && xSemaphoreTake(serial_mutex, portMAX_DELAY)) {
         ESP_LOGI(COMM_TAG, "%s", (command + '\n').c_str());
         char line[512];
-        while (strcmp(line, "$") != 0) {
+        do {
             if ((xTaskGetTickCount() - start_tick) > timeout_ticks) {
                 cJSON *root = cJSON_CreateObject();
                 cJSON_AddStringToObject(root, "datatype", "device_message");
@@ -25,7 +25,7 @@ std::string execute_command(const std::string& command){
                 break;
             }
 
-            int len = uart_readline(line, sizeof(line));    
+            int len = uart_readline(line, sizeof(line));  
             if (len > 0) {
                 if(lines <= 128) {
                     response += line;
@@ -35,7 +35,8 @@ std::string execute_command(const std::string& command){
             }
 
             vTaskDelay(pdMS_TO_TICKS(1)); 
-        }
+        }while (strcmp(line, "$") != 0);
+        uart_flush_input(UART_PORT);
         xSemaphoreGive(serial_mutex);
         if(response.find("$") != std::string::npos)response.erase(response.find('$'));
     }
@@ -91,17 +92,17 @@ char* message_handler(const std::string& msg, mbedtls_ssl_context* ssl)
         }
     }
     if (msg.find("/reboot-system") != std::string::npos) {
-        execute_command("sudo system reboot");
+        execute_command("sudo reboot");
     }
     if(msg.find("/reset-conn") != std::string::npos) {
         usb_disconnected = false;
         conn_timeout = false;
     }
     if(msg.find("/execute") != std::string::npos) {
-        std::string path = msg.substr(msg.find("/execute " + 9));
-        std::string result = execute_command("sudo sh " + path).find("ERROR") != std::string::npos
+        std::string path = msg.substr(msg.find("/execute ") + 9);
+        std::string result = (execute_command("sudo sh " + path).find("ERROR") == std::string::npos)
                             ? "Script executed successfully"
-                            : "Error while running script" + path;
+                            : "Error while running script " + path;
         cJSON *root = cJSON_CreateObject();
         cJSON_AddStringToObject(root, "datatype", "script_execution");
         cJSON_AddStringToObject(root, "result", result.c_str());

@@ -5,7 +5,6 @@
 #define VBUS_GPIO GPIO_NUM_4
 #define UART_PORT UART_NUM_0
 #define BUF_SIZE 4096
-#define UART_TIMEOUT_TICKS pdMS_TO_TICKS(5000)
 
 extern bool uart_connected;
 extern TickType_t last_uart_activity;

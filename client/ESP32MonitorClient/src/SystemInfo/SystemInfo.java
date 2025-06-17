@@ -1,4 +1,4 @@
-import SystemInfo.*;
+package SystemInfo;
 import java.util.List;
 
 import com.google.gson.Gson;
