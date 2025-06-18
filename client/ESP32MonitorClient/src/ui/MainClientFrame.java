@@ -79,10 +79,10 @@ public class MainClientFrame extends JFrame{
 	{
 		JDialog dialog = new JDialog((JFrame)null, "ESP32 Monitor", true);
 	    dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-	    dialog.setSize(300, 150);
-	    dialog.setLayout(new BorderLayout(10, 10));
+	    dialog.setSize(300, 100);
+	    dialog.setLayout(new BorderLayout());
 
-	    dialog.add(new JLabel("Message from ESP32\n" + msg), BorderLayout.CENTER);
+	    dialog.add(new JLabel("Message from ESP32: " + msg), BorderLayout.CENTER);
 
 	    JButton connectButton = new JButton("Retry");
 	    connectButton.addActionListener(e -> {
@@ -110,7 +110,7 @@ public class MainClientFrame extends JFrame{
 		if(cpuLoadPercents.size() > 12 && memoryLoadPercents.size() > 12 && swapUsagePercents.size() > 12)
 		{
 			int cpucnt = 0;
-			for(int i = cpuLoadPercents.size(); i > cpuLoadPercents.size() - 12; i--)
+			for(int i = cpuLoadPercents.size() - 1; i > cpuLoadPercents.size() - 12; i--)
 			{
 				if(cpuLoadPercents.get(i) > 95) cpucnt++;
 			}
@@ -122,7 +122,7 @@ public class MainClientFrame extends JFrame{
 			else if (cpucnt < 6) ignore = false;
 			
 			int memcnt = 0;
-			for(int i = memoryLoadPercents.size(); i > memoryLoadPercents.size() - 12; i--)
+			for(int i = memoryLoadPercents.size() - 1; i > memoryLoadPercents.size() - 12; i--)
 			{
 				if(memoryLoadPercents.get(i) > 95) memcnt++;
 			}
@@ -134,7 +134,7 @@ public class MainClientFrame extends JFrame{
 			else if (memcnt < 6) ignore = false;
 			
 			int swpcnt = 0;
-			for(int i = swapUsagePercents.size(); i > swapUsagePercents.size() - 12; i--)
+			for(int i = swapUsagePercents.size() - 1; i > swapUsagePercents.size() - 12; i--)
 			{
 				if(swapUsagePercents.get(i) > 95) swpcnt++;
 			}

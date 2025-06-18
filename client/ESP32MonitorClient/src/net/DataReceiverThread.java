@@ -99,6 +99,7 @@ public class DataReceiverThread extends Thread{
 		SystemLoadData data = gson.fromJson(line, SystemLoadData.class);
 		frame.setSystemLoad(data);
 		frame.displaySystemLoadData();
+		frame.checkForAnomalies();
 	}
 	public void processProcInfo(String line)
 	{

@@ -80,6 +80,7 @@ public class CommandHandler {
 	}
 	
 	public void executeScript() {
+		getScriptPath();
 		String path = pathField.getText(); 
 		if(out != null && !out.checkError()) {
 			out.println("/execute " + path);

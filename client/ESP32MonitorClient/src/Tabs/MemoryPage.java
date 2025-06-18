@@ -26,6 +26,8 @@ public class MemoryPage extends JPanel{
 	
 	public void displayMemoryLoad(Memory mem)
 	{
+		this.removeAll();
+		
 		int memUsage = (int) mem.getUsedMemoryPercent();
 		memUsagePanel.addDataPoint(memUsage);
 		int swapUsage = (int) mem.getUsedSwapPercent();
